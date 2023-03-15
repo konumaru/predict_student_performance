@@ -1,0 +1,19 @@
+version: "3"
+services:
+  kaggle_env:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    ports:
+      - 10000:10000
+    command: jupyter lab --port=10000 --ip=0.0.0.0 --allow-root --no-browser
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

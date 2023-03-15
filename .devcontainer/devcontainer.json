@@ -1,0 +1,71 @@
+{
+  "dockerComposeFile": ["../docker-compose.yml"],
+  "extensions": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.black-formatter",
+    "ms-toolsai.jupyter-keymap",
+    "ms-vscode.makefile-tools",
+    "ms-python.isort",
+    "dbaeumer.vscode-eslint",
+    "christian-kohler.path-intellisense",
+    "DavidAnson.vscode-markdownlint",
+    "vscodevim.vim",
+    "njpwerner.autodocstring",
+    "esbenp.prettier-vscode",
+    "yzhang.markdown-all-in-one",
+    "usernamehw.errorlens"
+  ],
+  "name": "kaggle-container",
+  "service": "kaggle_env",
+  "settings": {
+    // Makefile
+    "[makefile]": {
+      "editor.detectIndentation": false,
+      "editor.insertSpaces": false
+    },
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    // Editor
+    "editor.fontSize": 12,
+    "editor.formatOnPaste": false,
+    "editor.formatOnSave": true,
+    "editor.formatOnType": true,
+    "eslint.workingDirectories": [
+      {
+        "mode": "auto"
+      }
+    ],
+    // Python
+    "python.analysis.inlayHints.variableTypes": true,
+    "python.analysis.inlayHints.functionReturnTypes": true,
+    "[python]": {
+      "editor.tabSize": 4,
+      "editor.insertSpaces": true,
+      "editor.formatOnSave": true,
+      "editor.defaultFormatter": "ms-python.black-formatter",
+      "editor.codeActionsOnSave": {
+        "source.organizeImports": true
+      },
+      "editor.formatOnType": true
+    },
+    "python.defaultInterpreterPath": "/opt/conda/bin/python",
+    "python.languageServer": "Pylance",
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.completeFunctionParens": true,
+    "python.analysis.diagnosticMode": "workspace",
+    "python.linting.enabled": true,
+    "python.linting.cwd": "${workspaceFolder}",
+    "python.linting.pylintEnabled": false,
+    "python.linting.flake8Enabled": true,
+    "python.linting.flake8Path": "/usr/local/bin/pflake8",
+    "python.linting.mypyEnabled": true,
+    "python.linting.mypyPath": "/opt/conda/bin/mypy",
+    "python.formatting.provider": "black",
+    "python.testing.cwd": "${workspaceFolder}",
+    "jupyter.askForKernelRestart": false,
+    "autoDocstring.docstringFormat": "google",
+    "isort.path": ["/opt/conda/bin/isort"]
+  },
+  "shutdownAction": "stopCompose",
+  "workspaceFolder": "/workspace"
+}
