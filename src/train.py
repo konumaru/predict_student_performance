@@ -44,7 +44,6 @@ def predict(
     pred = np.zeros_like(y_valid)
     model = load_pickle(str(model_dir / "model.pkl"))
     pred = model.predict(X_valid)
-
     return pred
 
 

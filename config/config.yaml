@@ -1,0 +1,11 @@
+hydra:
+  run:
+    dir: ./data/.hydra
+  output_subdir: null
+
+seed: 42
+is_eval: True
+
+defaults:
+  - _self_
+  - model: rf

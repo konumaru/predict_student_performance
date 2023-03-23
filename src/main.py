@@ -1,12 +1,13 @@
 import hydra
+from omegaconf import DictConfig, OmegaConf
 
-from config import Config
 from utils import timer
 
 
-@hydra.main(version_base=None, config_name="config")
-def main(cfg: Config) -> None:
+@hydra.main(config_path="../config", config_name="config.yaml", version_base="1.3")
+def main(cfg: DictConfig) -> None:
     print("Hello Workd!")
+    print(OmegaConf.to_yaml(cfg))
 
 
 if __name__ == "__main__":
