@@ -5,5 +5,6 @@
 
 Kaggle Workspace is env for kaggle competition.
 
-Leaderboard:
-Discussion:
+Leaderboard: [Link](https://www.kaggle.com/competitions/predict-student-performance-from-game-play/leaderboard)
+
+Discussion: [Link](https://www.kaggle.com/competitions/predict-student-performance-from-game-play/discussion?sort=published)
