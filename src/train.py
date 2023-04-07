@@ -1,3 +1,4 @@
+import os
 import pathlib
 from typing import Any, Union
 
@@ -6,7 +7,7 @@ import numpy as np
 from omegaconf import OmegaConf
 from sklearn.ensemble import RandomForestRegressor
 
-from config import Config
+from utils import timer
 from utils.io import load_pickle, save_pickle
 
 
@@ -48,9 +49,10 @@ def predict(
 
 
 @hydra.main(version_base=None, config_name="config")
-def main(cfg: Config) -> None:
+def main(cfg: OmegaConf) -> None:
     print(OmegaConf.to_yaml(cfg))
 
 
 if __name__ == "__main__":
-    main()
+    with timer(os.path.basename(__file__)):
+        main()

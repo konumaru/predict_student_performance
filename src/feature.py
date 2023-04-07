@@ -1,7 +1,10 @@
+import os
+
 import hydra
 import numpy as np
+import polars as pl
+from omegaconf import OmegaConf
 
-from config import Config
 from utils import timer
 from utils.feature import feature
 
@@ -15,7 +18,7 @@ def dummpy_feature() -> np.ndarray:
 
 
 @hydra.main(version_base=None, config_name="config")
-def main(cfg: Config) -> None:
+def main(cfg: OmegaConf) -> None:
     feat_funcs = [
         dummpy_feature,
     ]
@@ -23,7 +26,13 @@ def main(cfg: Config) -> None:
     for func in feat_funcs:
         func()
 
+    # TODO:
+    # load data with poloar
+    train = pl.read_csv("./data/raw/train.csv")
+    # define ts class
+    # create feature for each group level
+
 
 if __name__ == "__main__":
-    with timer("main.py"):
+    with timer(os.path.basename(__file__)):
         main()

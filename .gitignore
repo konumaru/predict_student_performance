@@ -135,3 +135,4 @@ data/.hydra/
 *.txt
 *.pkl
 *.npy
+*.parquet

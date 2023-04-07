@@ -1,19 +1,20 @@
 from typing import List, Union
 
 import pandas as pd
+import polars as pl
 
 
-def drop_null_columns(data: pd.DataFrame, columns: List) -> pd.DataFrame:
-    return data.drop(columns, axis=1)
+def drop_null_columns(data: pl.DataFrame, columns: List) -> pl.DataFrame:
+    return data.drop(columns)
 
 
 def clip_values(
-    data: pd.DataFrame,
+    data: pl.DataFrame,
     columns: str,
-    min_val: Union[int, float, None],
-    max_val: Union[int, float, None],
-) -> pd.DataFrame:
-    data = data.assign(**{columns: lambda x: x[columns].clip(min_val, max_val)})
+    min_val: Union[int, float],
+    max_val: Union[int, float],
+) -> pl.DataFrame:
+    data = data.with_columns([pl.col(columns).clip(min_val, max_val).alias(columns)])
     return data
 
 
@@ -52,19 +53,24 @@ def cutoff_fqid(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def split_room_fqid(data: pd.DataFrame) -> pd.DataFrame:
-    data[[f"room_fqid_{i}" for i in range(3)]] = data["room_fqid"].str.split(
-        ".", expand=True
+def split_room_fqid(data: pl.DataFrame) -> pl.DataFrame:
+    room_fqid = (
+        data["room_fqid"]
+        .str.split_exact(".", n=2)
+        .struct.rename_fields([f"room_fqid_{i}" for i in range(3)])
+        .alias("fields")
+        .to_frame()
+        .unnest("fields")
     )
-    data.drop(["room_fqid", "room_fqid_0"], axis=1, inplace=True)
+    data = pl.concat([data, room_fqid], how="horizontal").drop(
+        ["room_fqid", "room_fqid_0"]
+    )
     return data
 
 
-def preprocessing(data: pd.DataFrame) -> pd.DataFrame:
-    data = drop_null_columns(
-        data, ["page", "fullscreen", "hq", "music", "hover_duration"]
-    )
+def preprocessing(data: pl.DataFrame) -> pl.DataFrame:
+    data = drop_null_columns(data, ["page", "hover_duration"])
     data = clip_values(data, "elapsed_time", 0, 1e7)
-    data = cutoff_fqid(data)
+    # data = cutoff_fqid(data)  # NOTE: Modelがいい感じに学習してくれるかもしれないので一旦やらない
     data = split_room_fqid(data)
     return data
