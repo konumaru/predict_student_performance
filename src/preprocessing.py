@@ -44,7 +44,8 @@ def main(cfg: DictConfig) -> None:
         .unnest("fields")
     )
     labels = labels.with_columns(
-        pl.col("level").str.replace("q", "").cast(pl.Int32).alias("level")
+        pl.col("session_id").cast(pl.Int64).alias("session_id"),
+        pl.col("level").str.replace("q", "").cast(pl.Int32).alias("level"),
     )
     labels.write_parquet(str(output_dir / "labels.parquet"))
     print(labels.head())

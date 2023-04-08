@@ -45,17 +45,21 @@ def main(cfg: DictConfig) -> None:
 
     train_iter = TrainTimeSeriesIterator(train)
     for level_group, train_batch in train_iter:
-        print(train_batch.head())
-        print(train_batch.shape)
-
-        # create feature for each group level.
+        # Create feature for each group level.
         features = create_features(train_batch, "./data/preprocessing", is_test=False)
-        features.to_pandas().to_parquet(
-            str(output_dir / f"{level_group}_train.parquet")
-        )
-        print(features.head())
 
-        # TODO: create label for each group level.
+        # Create label for each group level.
+        level_min = int(level_group.split("-")[0])
+        level_max = int(level_group.split("-")[1])
+        print(level_min, level_max)
+        label_batch = labels.filter(
+            (pl.col("level") >= level_min) & (pl.col("level") <= level_max)
+        )
+        print(label_batch.head())
+
+        output = label_batch.join(features, on="session_id", how="left")
+        output.write_parquet(str(output_dir / f"{level_group}_train.parquet"))
+        print(output.head())
 
 
 if __name__ == "__main__":
