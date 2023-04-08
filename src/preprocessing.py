@@ -23,16 +23,31 @@ def main(cfg: DictConfig) -> None:
         input_dir / "train.csv",
         n_rows=(10000 if cfg.debug else None),
     )
-
     train = preprocessing(train)
     train.write_parquet(str(output_dir / "train.parquet"))
     print(train.head())
 
-    cols_cat = ["event_name", "name", "fqid", "room_fqid_1", "room_fqid_2"]
+    cols_cat = ["event_name", "name", "fqid", "room_fqid", "room_fqid_1", "room_fqid_2"]
     for col in cols_cat:
-        unique_vals = train[col].unique().sort().to_list()
-        map_dict = {val: i for i, val in enumerate(unique_vals)}
-        save_pickle(str(output_dir / f"map_dict_{col}.pkl"), map_dict)
+        unique_vals = train.select(col).unique().to_pandas()[col].tolist()
+        save_pickle(str(output_dir / f"uniques_{col}.pkl"), unique_vals)
+
+    labels = pl.read_csv(
+        "./data/raw/train_labels.csv", n_rows=(10000 if cfg.debug else None)
+    )
+    labels = labels.with_columns(
+        labels["session_id"]
+        .str.split_exact("_", 1)
+        .struct.rename_fields(["session_id", "level"])
+        .alias("fields")
+        .to_frame()
+        .unnest("fields")
+    )
+    labels = labels.with_columns(
+        pl.col("level").str.replace("q", "").cast(pl.Int32).alias("level")
+    )
+    labels.write_parquet(str(output_dir / "labels.parquet"))
+    print(labels.head())
 
 
 if __name__ == "__main__":

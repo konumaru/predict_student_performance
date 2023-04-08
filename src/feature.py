@@ -1,36 +1,61 @@
 import os
+import pathlib
+from typing import Tuple
 
 import hydra
-import numpy as np
+import pandas as pd
 import polars as pl
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 
+from common import create_features
 from utils import timer
-from utils.feature import feature
 
 FEATURE_DIR = "./data/feature"
 
 
-@feature(FEATURE_DIR)
-def dummpy_feature() -> np.ndarray:
-    data = np.zeros((5, 100))
-    return data
+class TrainTimeSeriesIterator:
+    def __init__(self, train: pl.DataFrame) -> None:
+        self.train = train
+        self.groups = ["0-4", "5-12", "13-22"]
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> Tuple[str, pl.DataFrame]:
+        if len(self.groups) == 0:
+            raise StopIteration()
+
+        group = self.groups.pop(0)
+        train_group = self.train.filter(pl.col("level_group") == group)
+        return group, train_group
 
 
-@hydra.main(version_base=None, config_name="config")
-def main(cfg: OmegaConf) -> None:
-    feat_funcs = [
-        dummpy_feature,
-    ]
+@hydra.main(config_path="../config", config_name="config.yaml", version_base="1.3")
+def main(cfg: DictConfig) -> None:
+    print(OmegaConf.to_yaml(cfg))
 
-    for func in feat_funcs:
-        func()
+    input_dir = pathlib.Path("./data/preprocessing")
+    output_dir = pathlib.Path(FEATURE_DIR)
 
-    # TODO:
-    # load data with poloar
-    train = pl.read_csv("./data/raw/train.csv")
-    # define ts class
-    # create feature for each group level
+    train = pl.read_parquet(
+        input_dir / "train.parquet",
+        n_rows=(10000 if cfg.debug else None),
+    )
+    labels = pl.read_parquet(input_dir / "labels.parquet")
+
+    train_iter = TrainTimeSeriesIterator(train)
+    for level_group, train_batch in train_iter:
+        print(train_batch.head())
+        print(train_batch.shape)
+
+        # create feature for each group level.
+        features = create_features(train_batch, "./data/preprocessing", is_test=False)
+        features.to_pandas().to_parquet(
+            str(output_dir / f"{level_group}_train.parquet")
+        )
+        print(features.head())
+
+        # TODO: create label for each group level.
 
 
 if __name__ == "__main__":
