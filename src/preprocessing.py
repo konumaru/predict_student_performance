@@ -12,7 +12,9 @@ from utils import timer
 from utils.io import save_pickle
 
 
-@hydra.main(config_path="../config", config_name="config.yaml", version_base="1.3")
+@hydra.main(
+    config_path="../config", config_name="config.yaml", version_base="1.3"
+)
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
@@ -27,7 +29,14 @@ def main(cfg: DictConfig) -> None:
     train.write_parquet(str(output_dir / "train.parquet"))
     print(train.head())
 
-    cols_cat = ["event_name", "name", "fqid", "room_fqid", "room_fqid_1", "room_fqid_2"]
+    cols_cat = [
+        "event_name",
+        "name",
+        "fqid",
+        "room_fqid",
+        "room_fqid_1",
+        "room_fqid_2",
+    ]
     for col in cols_cat:
         unique_vals = train.select(col).unique().to_pandas()[col].tolist()
         save_pickle(str(output_dir / f"uniques_{col}.pkl"), unique_vals)

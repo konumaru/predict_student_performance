@@ -1,3 +1,15 @@
 name: xgb
 
-max_depth: -1
+params:
+  booster: gbtree
+  gpu_id: 0
+  tree_method: gpu_hist
+  objective: binary:logistic
+  eval_metric: logloss
+  learning_rate: 0.02
+  n_estimators: 200
+  max_depth: 4
+  subsample: 0.8
+  colsample_bytree: 0.7
+  min_child_weight: 20
+  reg_alpha: 8

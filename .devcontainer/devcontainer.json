@@ -57,14 +57,16 @@
     "python.linting.cwd": "${workspaceFolder}",
     "python.linting.pylintEnabled": false,
     "python.linting.flake8Enabled": true,
-    "python.linting.flake8Path": "/usr/local/bin/pflake8",
+    "python.linting.flake8Path": "/opt/conda/bin/pflake8",
     "python.linting.mypyEnabled": true,
     "python.linting.mypyPath": "/opt/conda/bin/mypy",
-    "python.formatting.provider": "black",
+    "python.formatting.provider": "/opt/conda/bin/black",
     "python.testing.cwd": "${workspaceFolder}",
     "jupyter.askForKernelRestart": false,
     "autoDocstring.docstringFormat": "google",
-    "isort.path": ["/opt/conda/bin/isort"]
+    "isort.path": ["/opt/conda/bin/isort"],
+    "black-formatter.args": ["--line-length=79"],
+    "python.linting.flake8Args": ["--max-line-length=79"]
   },
   "shutdownAction": "stopCompose",
   "workspaceFolder": "/workspace"

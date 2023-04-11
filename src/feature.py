@@ -30,7 +30,9 @@ class TrainTimeSeriesIterator:
         return group, train_group
 
 
-@hydra.main(config_path="../config", config_name="config.yaml", version_base="1.3")
+@hydra.main(
+    config_path="../config", config_name="config.yaml", version_base="1.3"
+)
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
@@ -43,23 +45,24 @@ def main(cfg: DictConfig) -> None:
     )
     labels = pl.read_parquet(input_dir / "labels.parquet")
 
-    train_iter = TrainTimeSeriesIterator(train)
-    for level_group, train_batch in train_iter:
-        # Create feature for each group level.
-        features = create_features(train_batch, "./data/preprocessing", is_test=False)
+    # Create feature for each group level.
+    features = create_features(train, "./data/preprocessing", is_test=False)
 
-        # Create label for each group level.
-        level_min = int(level_group.split("-")[0])
-        level_max = int(level_group.split("-")[1])
-        print(level_min, level_max)
-        label_batch = labels.filter(
-            (pl.col("level") >= level_min) & (pl.col("level") <= level_max)
+    # TODO: Joinではなくindexで取得する形に変更して処理を高速化
+    labels = labels.with_columns(
+        pl.when(pl.col("level") < 5)
+        .then("0-4")
+        .otherwise(
+            pl.when(pl.col("level") < 13).then("5-12").otherwise("13-22")
         )
-        print(label_batch.head())
+        .alias("level_group")
+    )
 
-        output = label_batch.join(features, on="session_id", how="left")
-        output.write_parquet(str(output_dir / f"{level_group}_train.parquet"))
-        print(output.head())
+    output = labels.join(
+        features, on=["session_id", "level_group"], how="left"
+    )
+    output.write_parquet(str(output_dir / "train_features.parquet"))
+    print(output)
 
 
 if __name__ == "__main__":

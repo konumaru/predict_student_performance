@@ -11,3 +11,8 @@ def load_pickle(filepath: str) -> Any:
 def save_pickle(filepath: str, data: Any) -> None:
     with open(filepath, "wb") as f:
         pickle.dump(data, f)
+
+
+def save_txt(filepath: str, data: Any) -> None:
+    with open(filepath, "w") as f:
+        f.write(data)

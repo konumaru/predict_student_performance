@@ -9,4 +9,4 @@ is_eval: True
 
 defaults:
   - _self_
-  - model: rf
+  - model: xgb

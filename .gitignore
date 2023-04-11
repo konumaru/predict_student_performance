@@ -136,3 +136,4 @@ data/.hydra/
 *.pkl
 *.npy
 *.parquet
+*.json

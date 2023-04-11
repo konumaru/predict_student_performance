@@ -1,3 +1,4 @@
+import pathlib
 from typing import List, Union
 
 import polars as pl
@@ -15,7 +16,9 @@ def clip_values(
     min_val: Union[int, float],
     max_val: Union[int, float],
 ) -> pl.DataFrame:
-    data = data.with_columns([pl.col(columns).clip(min_val, max_val).alias(columns)])
+    data = data.with_columns(
+        [pl.col(columns).clip(min_val, max_val).alias(columns)]
+    )
     return data
 
 
@@ -91,13 +94,9 @@ def preprocessing(data: pl.DataFrame) -> pl.DataFrame:
 
 def create_features(
     data: pl.DataFrame,
-    uniques_dir: str = "./data/preprocessing",
+    uniques_dirpath: str = "./data/preprocessing",
     is_test: bool = False,
 ) -> pl.DataFrame:
-    # TODO:
-    # tf-idfでベクトル変換する <- ここまでやるならnnの方がいいかも
-    #   でも今回の問題設定がlevel_groupごとの予測なので、eventがsequenceとも捉えがたい
-
     if is_test:
         data = preprocessing(data)
 
@@ -105,29 +104,29 @@ def create_features(
         (
             (pl.col("elapsed_time") - pl.col("elapsed_time").shift(1))
             .fill_null(0)
-            .clip(0, 1e7)
-            .over(["session_id"])
+            .clip(0, 1e9)
+            .over(["session_id", "level_group"])
             .alias("elapsed_time_diff")
         ),
         (
             (pl.col("screen_coor_x") - pl.col("screen_coor_x").shift(1))
             .abs()
-            .over(["session_id"])
+            .over(["session_id", "level_group"])
             .alias("location_x_diff")
         ),
         (
             (pl.col("screen_coor_y") - pl.col("screen_coor_y").shift(1))
             .abs()
-            .over(["session_id"])
+            .over(["session_id", "level_group"])
             .alias("location_y_diff")
         ),
-        pl.col("event_name").fill_null("null"),
-        pl.col("name").fill_null("null"),
-        pl.col("fqid").fill_null("null"),
-        pl.col("text_fqid").fill_null("null"),
-        pl.col("room_fqid").fill_null("null"),
-        pl.col("room_fqid_1").fill_null("null"),
-        pl.col("room_fqid_2").fill_null("null"),
+        pl.col("event_name").fill_null("event_name_null"),
+        pl.col("name").fill_null("name_null"),
+        pl.col("fqid").fill_null("fqid_null"),
+        pl.col("text_fqid").fill_null("text_fqid_null"),
+        pl.col("room_fqid").fill_null("room_fqid_null"),
+        pl.col("room_fqid_1").fill_null("room_fqid_1_null"),
+        pl.col("room_fqid_2").fill_null("room_fqid_2_null"),
     ]
     data = data.with_columns(columns)
 
@@ -135,6 +134,8 @@ def create_features(
         "event_name",
         "name",
         "level",
+        "level_group",
+        "text",
         "fqid",
         "text_fqid",
         "room_fqid",
@@ -157,27 +158,31 @@ def create_features(
     ]
 
     # Categorical features.
+    uniques_dir = pathlib.Path(uniques_dirpath)
+    event_names = load_pickle(str(uniques_dir / "uniques_event_name.pkl"))
+    names = load_pickle(str(uniques_dir / "uniques_name.pkl"))
+    fqids = load_pickle(str(uniques_dir / "uniques_fqid.pkl"))
+    room_fqid = load_pickle(str(uniques_dir / "uniques_room_fqid.pkl"))
+    room_fqid_1 = load_pickle(str(uniques_dir / "uniques_room_fqid_1.pkl"))
+    room_fqid_2 = load_pickle(str(uniques_dir / "uniques_room_fqid_2.pkl"))
+
     agg_features += [
         pl.col(c).drop_nulls().n_unique().alias(f"nunique_{c}") for c in CATS
     ]
-    event_names = load_pickle(f"{uniques_dir}/uniques_event_name.pkl")
-    names = load_pickle(f"{uniques_dir}/uniques_name.pkl")
-    fqids = load_pickle(f"{uniques_dir}/uniques_fqid.pkl")
-    room_fqid = load_pickle(f"{uniques_dir}/uniques_room_fqid.pkl")
-    room_fqid_1 = load_pickle(f"{uniques_dir}/uniques_room_fqid_1.pkl")
-    room_fqid_2 = load_pickle(f"{uniques_dir}/uniques_room_fqid_2.pkl")
-
     categorical_uniques = {
-        "event_name": event_names,
-        "name": names,
-        "fqid": fqids,
-        "room_fqid": room_fqid,
-        "room_fqid_1": room_fqid_1,
-        "room_fqid_2": room_fqid_2,
+        "event_name": event_names + ["event_name_null"],
+        "name": names + ["name_null"],
+        "fqid": fqids + ["fiqd_null"],
+        "room_fqid": room_fqid + ["room_fqid_null"],
+        "room_fqid_1": room_fqid_1 + ["room_fqid_1_null"],
+        "room_fqid_2": room_fqid_2 + ["room_fqid_2_null"],
     }
     for col, uniques in categorical_uniques.items():
         agg_features += [
-            pl.col(col).filter(pl.col(col) == u).count().alias(f"{col}_{u}_count")
+            pl.col(col)
+            .filter(pl.col(col) == u)
+            .count()
+            .alias(f"{col}_{u}_count")
             for u in uniques
         ]
 
@@ -213,15 +218,26 @@ def create_features(
             ]
 
     # Numeric features.
-    agg_features += [pl.col(c).drop_nulls().mean().alias(f"{c}_mean") for c in NUMS]
-    agg_features += [pl.col(c).drop_nulls().std().alias(f"{c}_std") for c in NUMS]
-    agg_features += [pl.col(c).drop_nulls().min().alias(f"{c}_min") for c in NUMS]
-    agg_features += [pl.col(c).drop_nulls().max().alias(f"{c}_max") for c in NUMS]
+    agg_features += [
+        pl.col(c).drop_nulls().mean().alias(f"{c}_mean") for c in NUMS
+    ]
+    agg_features += [
+        pl.col(c).drop_nulls().std().alias(f"{c}_std") for c in NUMS
+    ]
+    agg_features += [
+        pl.col(c).drop_nulls().min().alias(f"{c}_min") for c in NUMS
+    ]
+    agg_features += [
+        pl.col(c).drop_nulls().max().alias(f"{c}_max") for c in NUMS
+    ]
 
     for q_tile in [0.25, 0.5, 0.75]:
         agg_features += [
-            pl.col(c).quantile(q_tile).alias(f"{c}_qtile_{q_tile}") for c in NUMS
+            pl.col(c).quantile(q_tile).alias(f"{c}_qtile_{q_tile}")
+            for c in NUMS
         ]
 
-    results = data.groupby(["session_id"], maintain_order=True).agg(agg_features)
+    results = data.groupby(
+        ["session_id", "level_group"], maintain_order=True
+    ).agg(agg_features)
     return results
