@@ -3,7 +3,6 @@ import pathlib
 from typing import Tuple
 
 import hydra
-import pandas as pd
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
 
@@ -14,6 +13,7 @@ FEATURE_DIR = "./data/feature"
 
 
 class TrainTimeSeriesIterator:
+    # TODO: testデータのようにpandasでロードするほうが望ましいかも
     def __init__(self, train: pl.DataFrame) -> None:
         self.train = train
         self.groups = ["0-4", "5-12", "13-22"]

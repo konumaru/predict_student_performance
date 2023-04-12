@@ -6,10 +6,10 @@ import hydra
 import numpy as np
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
-from sklearn.metrics import f1_score
 from sklearn.model_selection import StratifiedGroupKFold
 from xgboost import XGBClassifier
 
+from metric import f1_score
 from utils import timer
 from utils.io import save_pickle, save_txt
 
@@ -43,7 +43,7 @@ def train(
         pred = model_cv.predict_proba(X_valid)[:, 1]
         oof[valid_idx] = pred
 
-        score = f1_score(y_valid, (pred > 0.5).astype(int))
+        score = f1_score(y_valid, pred, 0.6)
         print(f"f1-score of fold-{fold} is", score)
 
     return models, oof, y.ravel()
@@ -53,9 +53,16 @@ def save_xgb_model_as_json(
     save_dir: str, filename: str, models: List[Any]
 ) -> None:
     # ref: https://qiita.com/Ihmon/items/131e75ced14128e96f61
-
     for i, model in enumerate(models):
         model.save_model(os.path.join(save_dir, f"{filename}_{i}.json"))
+
+
+def evaluate(y_true, y_pred) -> Tuple[float, float]:
+    thresholds = np.linspace(0, 1, 100)
+    f1_scores = [f1_score(y_true, y_pred, t) for t in thresholds]
+    best_score = np.max(f1_scores)
+    best_threshold = thresholds[np.argmax(f1_scores)]
+    return best_score, best_threshold
 
 
 @hydra.main(
@@ -69,12 +76,14 @@ def main(cfg: DictConfig) -> None:
     model = XGBClassifier(**cfg.model.params)
     model.set_params(random_state=cfg.seed)
 
-    oofs = []
+    oof = []
+    oof_proba = []
     labels = []
+    levelThresholds = {}
     for level in range(1, 19):
-        print(f"\n#####  LEVEL={level} #####\n")
+        print(f"\n#####  LEVEL={level}  #####\n")
         _data = data.filter(pl.col("level") == level)
-        models, _oof, _label = train(_data, model)
+        models, _oof, _labels = train(_data, model)
 
         save_xgb_model_as_json(
             "./data/model", f"{cfg.model.name}_level{level}", models
@@ -83,14 +92,22 @@ def main(cfg: DictConfig) -> None:
             f"./data/train/{cfg.model.name}_oof_level{level}.pkl", _oof
         )
 
-        labels.append(_label)
-        oofs.append(_oof)
+        score, threshold = evaluate(_labels, _oof)
+        print(f"score={score}, threshold={threshold}")
+        levelThresholds[level] = threshold
+
+        labels.append(_labels)
+        oof_proba.append(_oof)
+        oof.append((_oof > threshold).astype(np.int8))
+
+    save_pickle("./data/working/levelTresholds.pkl", levelThresholds)
 
     # Evaluate oof.
-    oof_all = np.concatenate(oofs, axis=0)
+    oof_all = np.concatenate(oof, axis=0)
     label_all = np.concatenate(labels, axis=0)
-    score = f1_score(label_all, (oof_all > 0.5).astype(int))
-    save_txt(f"./data/train/{cfg.model.name}_oof_score.txt", str(score))
+    score, threshold = evaluate(label_all, oof_all)
+    save_txt("./data/train/oof_score.txt", str(score))
+    print("threshold is:", threshold)
     print("f1-score of oof is:", score)
 
 
