@@ -1,9 +1,7 @@
 import os
 import pathlib
-from typing import List, Union
 
 import hydra
-import pandas as pd
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
 
@@ -23,41 +21,29 @@ def main(cfg: DictConfig) -> None:
 
     train = pl.read_csv(
         input_dir / "train.csv",
-        n_rows=(10000 if cfg.debug else None),
+        n_rows=(1000 if cfg.debug else None),
     )
-    train = preprocessing(train)
-    train.write_parquet(str(output_dir / "train.parquet"))
+    labels = pl.read_csv(input_dir / "train_labels.csv")
+
     print(train.head())
+
+    train.write_parquet(output_dir / "train.parquet")
+    labels.write_parquet(output_dir / "labels.parquet")
 
     cols_cat = [
         "event_name",
         "name",
+        # "text",
         "fqid",
         "room_fqid",
-        "room_fqid_1",
-        "room_fqid_2",
+        "text_fqid",
     ]
     for col in cols_cat:
+        train = train.with_columns(
+            [train[col].fill_null(f"{col}_null").alias(col)]
+        )
         unique_vals = train.select(col).unique().to_pandas()[col].tolist()
         save_pickle(str(output_dir / f"uniques_{col}.pkl"), unique_vals)
-
-    labels = pl.read_csv(
-        "./data/raw/train_labels.csv", n_rows=(10000 if cfg.debug else None)
-    )
-    labels = labels.with_columns(
-        labels["session_id"]
-        .str.split_exact("_", 1)
-        .struct.rename_fields(["session_id", "level"])
-        .alias("fields")
-        .to_frame()
-        .unnest("fields")
-    )
-    labels = labels.with_columns(
-        pl.col("session_id").cast(pl.Int64).alias("session_id"),
-        pl.col("level").str.replace("q", "").cast(pl.Int32).alias("level"),
-    )
-    labels.write_parquet(str(output_dir / "labels.parquet"))
-    print(labels.head())
 
 
 if __name__ == "__main__":

@@ -3,31 +3,37 @@ import pathlib
 from typing import Tuple
 
 import hydra
+import pandas as pd
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
 
-from common import create_features
+from common import create_features, parse_labels
 from utils import timer
-
-FEATURE_DIR = "./data/feature"
 
 
 class TrainTimeSeriesIterator:
     # TODO: testデータのようにpandasでロードするほうが望ましいかも
-    def __init__(self, train: pl.DataFrame) -> None:
+    def __init__(self, train: pl.DataFrame, labels: pl.DataFrame) -> None:
         self.train = train
+        self.labels = labels
         self.groups = ["0-4", "5-12", "13-22"]
 
     def __iter__(self):
         return self
 
-    def __next__(self) -> Tuple[str, pl.DataFrame]:
+    def __next__(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         if len(self.groups) == 0:
             raise StopIteration()
 
         group = self.groups.pop(0)
-        train_group = self.train.filter(pl.col("level_group") == group)
-        return group, train_group
+        group_min, group_max = (int(s) for s in group.split("-"))
+        batch_train = self.train.filter(pl.col("level_group") == group)
+
+        regex = "|".join([f"_q{i}" for i in range(group_min, group_max + 1)])
+        batch_labels = self.labels.filter(
+            pl.col("session_id").str.contains(regex)
+        )
+        return batch_train.to_pandas(), batch_labels.to_pandas()
 
 
 @hydra.main(
@@ -37,32 +43,47 @@ def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
     input_dir = pathlib.Path("./data/preprocessing")
-    output_dir = pathlib.Path(FEATURE_DIR)
+    output_dir = pathlib.Path("./data/feature")
 
     train = pl.read_parquet(
         input_dir / "train.parquet",
         n_rows=(10000 if cfg.debug else None),
     )
-    labels = pl.read_parquet(input_dir / "labels.parquet")
+    labels = pl.read_parquet(
+        input_dir / "labels.parquet", n_rows=(10000 if cfg.debug else None)
+    )
 
-    # Create feature for each group level.
-    features = create_features(train, "./data/preprocessing", is_test=False)
-
-    # TODO: Joinではなくindexで取得する形に変更して処理を高速化
-    labels = labels.with_columns(
-        pl.when(pl.col("level") < 5)
-        .then("0-4")
-        .otherwise(
-            pl.when(pl.col("level") < 13).then("5-12").otherwise("13-22")
+    features_all = []
+    labels_all = []
+    iter_train = TrainTimeSeriesIterator(train, labels)
+    for batch_train, batch_labels in iter_train:
+        level_group = batch_train["level_group"][0]
+        features = create_features(
+            batch_train, level_group, "./data/preprocessing"
         )
-        .alias("level_group")
-    )
+        features = features.with_columns(
+            pl.lit(level_group).alias("level_group")
+        )
 
-    output = labels.join(
-        features, on=["session_id", "level_group"], how="left"
-    )
-    output.write_parquet(str(output_dir / "train_features.parquet"))
-    print(output)
+        batch_labels = parse_labels(batch_labels)
+        batch_labels = batch_labels.with_columns(
+            pl.lit(level_group).alias("level_group")
+        )
+
+        features.write_parquet(output_dir / f"features_{level_group}.parquet")
+        batch_labels.write_parquet(
+            output_dir / f"labels_{level_group}.parquet"
+        )
+
+        features_all.append(features)
+        labels_all.append(batch_labels)
+
+    X = pl.concat(features_all, how="vertical")
+    y = pl.concat(labels_all, how="vertical")
+
+    results = y.join(X, on=["session_id", "level_group"], how="left")
+    print(results.columns)
+    results.write_parquet(output_dir / "features.parquet")
 
 
 if __name__ == "__main__":

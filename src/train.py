@@ -1,4 +1,5 @@
 import os
+import pathlib
 from copy import deepcopy
 from typing import Any, List, Tuple
 
@@ -6,47 +7,12 @@ import hydra
 import numpy as np
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
-from sklearn.model_selection import StratifiedGroupKFold
+from sklearn.model_selection import GroupKFold
 from xgboost import XGBClassifier
 
-from metric import f1_score
+from metric import f1_score_with_threshold
 from utils import timer
 from utils.io import save_pickle, save_txt
-
-
-def train(
-    data: pl.DataFrame, model: Any
-) -> Tuple[List[Any], np.ndarray, np.ndarray]:
-    models = []
-    oof = np.zeros(len(data))
-
-    X = data.select(
-        pl.exclude("session_id", "correct", "level", "level_group")
-    ).to_numpy()
-    y = data.select(pl.col("correct")).to_numpy()
-    group = data.select(pl.col("session_id")).to_numpy()
-
-    cv = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
-    for fold, (train_idx, valid_idx) in enumerate(cv.split(X, y, group)):
-        print(f"Train fold-{fold} >>>")
-        model_cv = deepcopy(model)
-        X_train, X_valid = X[train_idx], X[valid_idx]
-        y_train, y_valid = y[train_idx], y[valid_idx]
-
-        model_cv.fit(
-            X_train,
-            y_train,
-            eval_set=[(X_train, y_train), (X_valid, y_valid)],
-            verbose=20,
-        )
-        models.append(model_cv)
-        pred = model_cv.predict_proba(X_valid)[:, 1]
-        oof[valid_idx] = pred
-
-        score = f1_score(y_valid, pred, 0.6)
-        print(f"f1-score of fold-{fold} is", score)
-
-    return models, oof, y.ravel()
 
 
 def save_xgb_model_as_json(
@@ -57,9 +23,81 @@ def save_xgb_model_as_json(
         model.save_model(os.path.join(save_dir, f"{filename}_{i}.json"))
 
 
+def train(data: pl.DataFrame, model: Any) -> Tuple[np.ndarray, np.ndarray]:
+    featrues = (
+        data.select(pl.exclude("session_level", "session_id", "level_group"))
+        .to_pandas()
+        .reset_index(drop=True)
+    )
+    groups = data.select(pl.col("session_id")).to_numpy()
+
+    oof = np.zeros(len(data))
+    cv = GroupKFold(n_splits=5)
+    for fold, (train_idx, valid_idx) in enumerate(
+        cv.split(featrues, groups=groups)
+    ):
+        features_train, features_valid = (
+            featrues.iloc[train_idx],
+            featrues.iloc[valid_idx],
+        )
+
+        print(f"\n##### Train fold-{fold} #####\n")
+        pred_fold = np.zeros(len(valid_idx))
+        for _level in range(1, 19):
+            print(f">>>>> LEVEL={_level}")
+
+            features_train_level = features_train.query("level==@_level")
+            features_valid_level = features_valid.query("level==@_level")
+
+            X_train_level = features_train_level.drop(
+                ["level", "correct"], axis=1
+            ).to_numpy()
+            y_train_level = features_train_level["correct"].to_numpy()
+            X_valid_level = features_valid_level.drop(
+                ["level", "correct"], axis=1
+            ).to_numpy()
+            y_valid_level = features_valid_level["correct"].to_numpy()
+
+            _model = deepcopy(model)
+            _model.fit(
+                X_train_level,
+                y_train_level,
+                eval_set=[
+                    (X_train_level, y_train_level),
+                    (X_valid_level, y_valid_level),
+                ],
+                verbose=0,
+            )
+            _model.save_model(
+                os.path.join(
+                    hydra.utils.get_original_cwd(),
+                    "data",
+                    "models",
+                    f"level{_level}_fold{fold}.json",
+                )
+            )
+
+            pred = _model.predict_proba(X_valid_level)[:, 1]
+            pred_fold[features_valid["level"] == _level] = pred
+
+        oof[valid_idx] = pred_fold.copy()
+
+        # score = f1_score(
+        #     features_valid["correct"].to_numpy(), oof[valid_idx], 0.6
+        # )
+        score = f1_score_with_threshold(
+            features_valid["correct"].to_numpy(), oof[valid_idx], 0.6
+        )
+        print(f"f1-score of fold-{fold} is", score)
+
+    return oof, featrues["correct"].to_numpy()
+
+
 def evaluate(y_true, y_pred) -> Tuple[float, float]:
     thresholds = np.linspace(0, 1, 100)
-    f1_scores = [f1_score(y_true, y_pred, t) for t in thresholds]
+    f1_scores = [
+        f1_score_with_threshold(y_true, y_pred, t) for t in thresholds
+    ]
     best_score = np.max(f1_scores)
     best_threshold = thresholds[np.argmax(f1_scores)]
     return best_score, best_threshold
@@ -71,44 +109,30 @@ def evaluate(y_true, y_pred) -> Tuple[float, float]:
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
-    data = pl.read_parquet("./data/feature/train_features.parquet")
+    input_dir = pathlib.Path("./data/feature")
+    output_dir = pathlib.Path("./data/train")
+
+    data = pl.read_parquet(input_dir / "features.parquet")
 
     model = XGBClassifier(**cfg.model.params)
     model.set_params(random_state=cfg.seed)
 
-    oof = []
-    oof_proba = []
-    labels = []
+    oof, labels = train(data, model)
+    save_pickle(str(output_dir / "oof.pkl"), oof)
+
     levelThresholds = {}
     for level in range(1, 19):
-        print(f"\n#####  LEVEL={level}  #####\n")
-        _data = data.filter(pl.col("level") == level)
-        models, _oof, _labels = train(_data, model)
-
-        save_xgb_model_as_json(
-            "./data/model", f"{cfg.model.name}_level{level}", models
-        )
-        save_pickle(
-            f"./data/train/{cfg.model.name}_oof_level{level}.pkl", _oof
-        )
-
-        score, threshold = evaluate(_labels, _oof)
-        print(f"score={score}, threshold={threshold}")
+        flag_level = (data.to_pandas()["level"] == level).to_numpy()
+        score, threshold = evaluate(labels[flag_level], oof[flag_level])
+        print(f"\nf1-score of oof of {level} =", score)
         levelThresholds[level] = threshold
-
-        labels.append(_labels)
-        oof_proba.append(_oof)
-        oof.append((_oof > threshold).astype(np.int8))
-
-    save_pickle("./data/working/levelTresholds.pkl", levelThresholds)
+    save_pickle("./data/models/levelTresholds.pkl", levelThresholds)
 
     # Evaluate oof.
-    oof_all = np.concatenate(oof, axis=0)
-    label_all = np.concatenate(labels, axis=0)
-    score, threshold = evaluate(label_all, oof_all)
+    score, threshold = evaluate(labels, oof)
     save_txt("./data/train/oof_score.txt", str(score))
+    print("\nf1-score of oof is =", score)
     print("threshold is:", threshold)
-    print("f1-score of oof is:", score)
 
 
 if __name__ == "__main__":

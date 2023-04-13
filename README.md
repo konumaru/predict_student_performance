@@ -5,7 +5,8 @@
 
 [Leaderboard](https://www.kaggle.com/competitions/predict-student-performance-from-game-play/leaderboard) | [Discussion](https://www.kaggle.com/competitions/predict-student-performance-from-game-play/discussion?sort=published)
 
-## Point
+## Solution
 
+- Create features for each level_group.
 - Train model for each level not each level_group.
 - Calculate best threshold of f1-score for each level (model).

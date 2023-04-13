@@ -5,11 +5,10 @@ params:
   gpu_id: 0
   tree_method: gpu_hist
   objective: binary:logistic
-  eval_metric: logloss
-  learning_rate: 0.02
+  eval_metric: auc
+  learning_rate: 0.05
   n_estimators: 200
-  max_depth: 4
-  subsample: 0.8
-  colsample_bytree: 0.7
+  subsample: 1.0
+  colsample_bytree: 0.9
   min_child_weight: 20
-  reg_alpha: 8
+  reg_alpha: 5
