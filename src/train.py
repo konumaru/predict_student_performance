@@ -12,7 +12,7 @@ from xgboost import XGBClassifier
 
 from metric import f1_score_with_threshold
 from utils import timer
-from utils.io import save_pickle, save_txt
+from utils.io import load_pickle, save_pickle, save_txt
 
 
 def save_xgb_model_as_json(
@@ -25,7 +25,7 @@ def save_xgb_model_as_json(
 
 def train(data: pl.DataFrame, model: Any) -> Tuple[np.ndarray, np.ndarray]:
     featrues = (
-        data.select(pl.exclude("session_level", "session_id", "level_group"))
+        data.select(pl.exclude("session_level", "session_id"))
         .to_pandas()
         .reset_index(drop=True)
     )
@@ -43,18 +43,22 @@ def train(data: pl.DataFrame, model: Any) -> Tuple[np.ndarray, np.ndarray]:
 
         print(f"\n##### Train fold-{fold} #####\n")
         pred_fold = np.zeros(len(valid_idx))
-        for _level in range(1, 19):
-            print(f">>>>> LEVEL={_level}")
+        for level_group in ("0-4", "5-12", "13-22"):
+            print(f">>>>> LEVEL GROUP = {level_group}")
 
-            features_train_level = features_train.query("level==@_level")
-            features_valid_level = features_valid.query("level==@_level")
+            features_train_level = features_train.query(
+                "level_group==@level_group"
+            )
+            features_valid_level = features_valid.query(
+                "level_group==@level_group"
+            )
 
             X_train_level = features_train_level.drop(
-                ["level", "correct"], axis=1
+                ["level_group", "correct"], axis=1
             ).to_numpy()
             y_train_level = features_train_level["correct"].to_numpy()
             X_valid_level = features_valid_level.drop(
-                ["level", "correct"], axis=1
+                ["level_group", "correct"], axis=1
             ).to_numpy()
             y_valid_level = features_valid_level["correct"].to_numpy()
 
@@ -66,25 +70,22 @@ def train(data: pl.DataFrame, model: Any) -> Tuple[np.ndarray, np.ndarray]:
                     (X_train_level, y_train_level),
                     (X_valid_level, y_valid_level),
                 ],
-                verbose=0,
+                verbose=20,
             )
             _model.save_model(
                 os.path.join(
                     hydra.utils.get_original_cwd(),
                     "data",
                     "models",
-                    f"level{_level}_fold{fold}.json",
+                    f"levelGroup-{level_group}_fold-{fold}.json",
                 )
             )
 
             pred = _model.predict_proba(X_valid_level)[:, 1]
-            pred_fold[features_valid["level"] == _level] = pred
+            pred_fold[features_valid["level_group"] == level_group] = pred
 
         oof[valid_idx] = pred_fold.copy()
 
-        # score = f1_score(
-        #     features_valid["correct"].to_numpy(), oof[valid_idx], 0.6
-        # )
         score = f1_score_with_threshold(
             features_valid["correct"].to_numpy(), oof[valid_idx], 0.6
         )
@@ -120,21 +121,23 @@ def main(cfg: DictConfig) -> None:
     oof, labels = train(data, model)
     save_pickle(str(output_dir / "oof.pkl"), oof)
 
-    levelThresholds = {}
-    for level in range(1, 19):
-        flag_level = (data.to_pandas()["level"] == level).to_numpy()
-        score, threshold = evaluate(labels[flag_level], oof[flag_level])
-        print(f"\nf1-score of oof of {level} =", score)
-        levelThresholds[level] = threshold
-    save_pickle("./data/models/levelTresholds.pkl", levelThresholds)
-
     # Evaluate oof.
+    levelThresholds = {}
+    for level in ("0-4", "5-12", "13-22"):
+        flag_level = (data.to_pandas()["level_group"] == level).to_numpy()
+        score, threshold = evaluate(labels[flag_level], oof[flag_level])
+        print(f"f1-score of oof of {level} =", score)
+        levelThresholds[level] = threshold
+
     score, threshold = evaluate(labels, oof)
     save_txt("./data/train/oof_score.txt", str(score))
     print("\nf1-score of oof is =", score)
+    levelThresholds["all"] = threshold  # 0 is for all levels
     print("threshold is:", threshold)
+
+    save_pickle("./data/models/levelTresholds.pkl", levelThresholds)
 
 
 if __name__ == "__main__":
-    with timer(os.path.basename(__file__)):
+    with timer("Train"):
         main()

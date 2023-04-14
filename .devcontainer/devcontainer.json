@@ -14,7 +14,8 @@
     "njpwerner.autodocstring",
     "esbenp.prettier-vscode",
     "yzhang.markdown-all-in-one",
-    "usernamehw.errorlens"
+    "usernamehw.errorlens",
+    "GitHub.copilot"
   ],
   "name": "kaggle-container",
   "service": "kaggle_env",

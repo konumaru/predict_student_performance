@@ -9,6 +9,6 @@ params:
   learning_rate: 0.05
   n_estimators: 200
   subsample: 1.0
-  colsample_bytree: 0.9
+  colsample_bytree: 0.5
   min_child_weight: 20
   reg_alpha: 5

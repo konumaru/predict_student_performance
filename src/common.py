@@ -200,36 +200,36 @@ def create_features(
             for u in uniques
         ]
 
-        agg_cols = ["elapsed_time", "location_x_diff", "location_y_diff"]
-        for agg_col in agg_cols:
-            agg_features += [
-                pl.col(agg_col)
-                .filter(pl.col(col) == u)
-                .mean()
-                .alias(f"{col}_{u}_{agg_col}_mean")
-                for u in uniques
-            ]
-            agg_features += [
-                pl.col(agg_col)
-                .filter(pl.col(col) == u)
-                .std()
-                .alias(f"{col}_{u}_{agg_col}_std")
-                for u in uniques
-            ]
-            agg_features += [
-                pl.col(agg_col)
-                .filter(pl.col(col) == u)
-                .max()
-                .alias(f"{col}_{u}_{agg_col}_max")
-                for u in uniques
-            ]
-            agg_features += [
-                pl.col(agg_col)
-                .filter(pl.col(col) == u)
-                .min()
-                .alias(f"{col}_{u}_{agg_col}_min")
-                for u in uniques
-            ]
+        # agg_cols = ["elapsed_time", "location_x_diff", "location_y_diff"]
+        # for agg_col in agg_cols:
+        #     agg_features += [
+        #         pl.col(agg_col)
+        #         .filter(pl.col(col) == u)
+        #         .mean()
+        #         .alias(f"{col}_{u}_{agg_col}_mean")
+        #         for u in uniques
+        #     ]
+        #     agg_features += [
+        #         pl.col(agg_col)
+        #         .filter(pl.col(col) == u)
+        #         .std()
+        #         .alias(f"{col}_{u}_{agg_col}_std")
+        #         for u in uniques
+        #     ]
+        #     agg_features += [
+        #         pl.col(agg_col)
+        #         .filter(pl.col(col) == u)
+        #         .max()
+        #         .alias(f"{col}_{u}_{agg_col}_max")
+        #         for u in uniques
+        #     ]
+        #     agg_features += [
+        #         pl.col(agg_col)
+        #         .filter(pl.col(col) == u)
+        #         .min()
+        #         .alias(f"{col}_{u}_{agg_col}_min")
+        #         for u in uniques
+        #     ]
 
     # Numeric features.
     agg_features += [

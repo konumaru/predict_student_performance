@@ -1,4 +1,5 @@
 import pathlib
+import subprocess
 
 import hydra
 import numpy as np
@@ -80,3 +81,4 @@ def main(cfg: DictConfig) -> None:
 if __name__ == "__main__":
     with timer("Submission"):
         main()
+    subprocess.run(["rm", "submission.csv"])
