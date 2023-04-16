@@ -53,8 +53,6 @@ def main(cfg: DictConfig) -> None:
         input_dir / "labels.parquet", n_rows=(10000 if cfg.debug else None)
     )
 
-    features_all = []
-    labels_all = []
     iter_train = TrainTimeSeriesIterator(train, labels)
     for batch_train, batch_labels in iter_train:
         level_group = batch_train["level_group"][0]
@@ -70,20 +68,10 @@ def main(cfg: DictConfig) -> None:
             pl.lit(level_group).alias("level_group")
         )
 
-        features.write_parquet(output_dir / f"features_{level_group}.parquet")
-        batch_labels.write_parquet(
-            output_dir / f"labels_{level_group}.parquet"
+        results = batch_labels.join(
+            features, on=["session_id", "level_group"], how="left"
         )
-
-        features_all.append(features)
-        labels_all.append(batch_labels)
-
-    X = pl.concat(features_all, how="vertical")
-    y = pl.concat(labels_all, how="vertical")
-
-    results = y.join(X, on=["session_id", "level_group"], how="left")
-    print(results.columns)
-    results.write_parquet(output_dir / "features.parquet")
+        results.write_parquet(output_dir / f"features_{level_group}.parquet")
 
 
 if __name__ == "__main__":

@@ -1,12 +1,15 @@
 import os
 import pathlib
-from copy import deepcopy
-from typing import Any, List, Tuple
+from typing import Tuple
 
 import hydra
+import lightgbm
 import numpy as np
 import polars as pl
+from catboost import CatBoostClassifier
+from lightgbm import LGBMClassifier
 from omegaconf import DictConfig, OmegaConf
+from sklearn.metrics import f1_score
 from sklearn.model_selection import GroupKFold
 from xgboost import XGBClassifier
 
@@ -15,83 +18,143 @@ from utils import timer
 from utils.io import load_pickle, save_pickle, save_txt
 
 
-def save_xgb_model_as_json(
-    save_dir: str, filename: str, models: List[Any]
-) -> None:
-    # ref: https://qiita.com/Ihmon/items/131e75ced14128e96f61
-    for i, model in enumerate(models):
-        model.save_model(os.path.join(save_dir, f"{filename}_{i}.json"))
-
-
-def train(data: pl.DataFrame, model: Any) -> Tuple[np.ndarray, np.ndarray]:
-    featrues = (
-        data.select(pl.exclude("session_level", "session_id"))
-        .to_pandas()
-        .reset_index(drop=True)
+def fit_cat(
+    params,
+    X_train,
+    y_train,
+    X_valid,
+    y_valid,
+    save_filepath: str,
+    seed: int = 42,
+) -> CatBoostClassifier:
+    model = CatBoostClassifier(**params)
+    model.set_params(random_state=seed)
+    model.fit(
+        X_train,
+        y_train,
+        eval_set=[(X_train, y_train), (X_valid, y_valid)],
+        use_best_model=True,
     )
-    groups = data.select(pl.col("session_id")).to_numpy()
+    model.save_model(save_filepath)
+    return model
 
-    oof = np.zeros(len(data))
-    cv = GroupKFold(n_splits=5)
-    for fold, (train_idx, valid_idx) in enumerate(
-        cv.split(featrues, groups=groups)
-    ):
-        features_train, features_valid = (
-            featrues.iloc[train_idx],
-            featrues.iloc[valid_idx],
+
+def fit_lgbm(
+    params,
+    X_train,
+    y_train,
+    X_valid,
+    y_valid,
+    save_filepath: str,
+    seed: int = 42,
+) -> LGBMClassifier:
+    model = LGBMClassifier(**params)
+    model.set_params(random_state=seed)
+    model.fit(
+        X_train,
+        y_train,
+        eval_set=[(X_train, y_train), (X_valid, y_valid)],
+        eval_metric="auc",
+        callbacks=[lightgbm.log_evaluation(50)],
+    )
+    model.booster_.save_model(save_filepath)
+    return model
+
+
+def fit_xgb(
+    params,
+    X_train,
+    y_train,
+    X_valid,
+    y_valid,
+    save_filepath: str,
+    seed: int = 42,
+) -> XGBClassifier:
+    model = XGBClassifier(**params)
+    model.set_params(random_state=seed)
+    model.fit(
+        X_train,
+        y_train,
+        eval_set=[(X_train, y_train), (X_valid, y_valid)],
+        verbose=50,
+    )
+    model.save_model(save_filepath)
+    return model
+
+
+def train(
+    cfg: DictConfig,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    oofs = []
+    labels = []
+    groups = []
+    folds = []
+
+    for level_group in ("0-4", "5-12", "13-22"):
+        print(f"\n##### LEVEL GROUP={level_group} #####\n")
+        data = pl.read_parquet(
+            f"./data/feature/features_{level_group}.parquet"
         )
 
-        print(f"\n##### Train fold-{fold} #####\n")
-        pred_fold = np.zeros(len(valid_idx))
-        for level_group in ("0-4", "5-12", "13-22"):
-            print(f">>>>> LEVEL GROUP = {level_group}")
+        X = data.select(
+            pl.exclude("session_level", "correct", "session_id", "level_group")
+        ).to_numpy()
+        y = data.select(pl.col("correct")).to_numpy().ravel()
+        session_ids = data.select(pl.col("session_id")).to_numpy()
 
-            features_train_level = features_train.query(
-                "level_group==@level_group"
-            )
-            features_valid_level = features_valid.query(
-                "level_group==@level_group"
-            )
+        oof_level_group = np.zeros(len(y))
+        folds_level_group = np.zeros(len(y))
+        cv = GroupKFold(n_splits=cfg.n_splits)
+        for fold, (train_idx, valid_idx) in enumerate(
+            cv.split(X, groups=session_ids)
+        ):
+            print(f">>>>> Train fold-{fold}")
+            X_train, X_valid = X[train_idx], X[valid_idx]
+            y_train, y_valid = y[train_idx], y[valid_idx]
 
-            X_train_level = features_train_level.drop(
-                ["level_group", "correct"], axis=1
-            ).to_numpy()
-            y_train_level = features_train_level["correct"].to_numpy()
-            X_valid_level = features_valid_level.drop(
-                ["level_group", "correct"], axis=1
-            ).to_numpy()
-            y_valid_level = features_valid_level["correct"].to_numpy()
+            if cfg.model.name == "xgb":
+                fit_model = fit_xgb
+            elif cfg.model.name == "lgbm":
+                fit_model = fit_lgbm
+            elif cfg.model.name == "cat":
+                fit_model = fit_cat
+            else:
+                fit_model = fit_xgb
 
-            _model = deepcopy(model)
-            _model.fit(
-                X_train_level,
-                y_train_level,
-                eval_set=[
-                    (X_train_level, y_train_level),
-                    (X_valid_level, y_valid_level),
-                ],
-                verbose=20,
-            )
-            _model.save_model(
-                os.path.join(
+            suffix = f"levelGroup-{level_group}_fold-{fold}"
+            model = fit_model(
+                cfg.model.params,
+                X_train,
+                y_train,
+                X_valid,
+                y_valid,
+                save_filepath=os.path.join(
                     hydra.utils.get_original_cwd(),
                     "data",
                     "models",
-                    f"levelGroup-{level_group}_fold-{fold}.json",
-                )
+                    f"model-{cfg.model.name}_{suffix}",
+                ),
+                seed=cfg.seed,
             )
 
-            pred = _model.predict_proba(X_valid_level)[:, 1]
-            pred_fold[features_valid["level_group"] == level_group] = pred
+            pred = model.predict_proba(X_valid)[:, 1]
+            oof_level_group[valid_idx] = pred
+            folds_level_group[valid_idx] = fold
 
-        oof[valid_idx] = pred_fold.copy()
+        groups.append(np.repeat(level_group, len(y)))
+        folds.append(folds_level_group)
 
-        score = f1_score_with_threshold(
-            features_valid["correct"].to_numpy(), oof[valid_idx], 0.6
-        )
-        print(f"f1-score of fold-{fold} is", score)
+        score = f1_score_with_threshold(y, oof_level_group, 0.6)
+        print(f"f1-score of level_group={level_group}:", score)
 
-    return oof, featrues["correct"].to_numpy()
+        oofs.append(oof_level_group)
+        labels.append(y)
+
+    oof_all = np.concatenate(oofs)
+    label_all = np.concatenate(labels)
+    fold_all = np.concatenate(folds)
+    group_all = np.concatenate(groups)
+    return oof_all, label_all, fold_all, group_all
 
 
 def evaluate(y_true, y_pred) -> Tuple[float, float]:
@@ -110,32 +173,41 @@ def evaluate(y_true, y_pred) -> Tuple[float, float]:
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
-    input_dir = pathlib.Path("./data/feature")
     output_dir = pathlib.Path("./data/train")
 
-    data = pl.read_parquet(input_dir / "features.parquet")
+    oof, label, fold, group = train(cfg)
+    save_pickle(str(output_dir / f"oof-{cfg.model.name}.pkl"), oof)
+    save_pickle(str(output_dir / f"label-{cfg.model.name}.pkl"), label)
+    save_pickle(str(output_dir / f"fold-{cfg.model.name}.pkl"), fold)
+    save_pickle(str(output_dir / f"group-{cfg.model.name}.pkl"), group)
 
-    model = XGBClassifier(**cfg.model.params)
-    model.set_params(random_state=cfg.seed)
-
-    oof, labels = train(data, model)
-    save_pickle(str(output_dir / "oof.pkl"), oof)
+    # oof = load_pickle(str(output_dir / f"oof-{cfg.model.name}.pkl"))
+    # label = load_pickle(str(output_dir / f"label-{cfg.model.name}.pkl"))
+    # group = load_pickle(str(output_dir / f"group-{cfg.model.name}.pkl"))
 
     # Evaluate oof.
+    print("\n##### Evaluate #####\n")
+    oof_binary = np.zeros(len(oof))
     levelThresholds = {}
-    for level in ("0-4", "5-12", "13-22"):
-        flag_level = (data.to_pandas()["level_group"] == level).to_numpy()
-        score, threshold = evaluate(labels[flag_level], oof[flag_level])
-        print(f"f1-score of oof of {level} =", score)
-        levelThresholds[level] = threshold
+    for level_group in ("0-4", "5-12", "13-22"):
+        flag_level = (group == level_group).astype(np.bool8)
+        score, threshold = evaluate(label[flag_level], oof[flag_level])
+        print(
+            f"f1-score of level_group={level_group:5}:",
+            score,
+            f"threshold={threshold:4f}",
+        )
+        levelThresholds[level_group] = threshold
 
-    score, threshold = evaluate(labels, oof)
-    save_txt("./data/train/oof_score.txt", str(score))
-    print("\nf1-score of oof is =", score)
-    levelThresholds["all"] = threshold  # 0 is for all levels
-    print("threshold is:", threshold)
+        oof_binary[flag_level] = (oof[flag_level] > threshold).astype(np.int8)
 
-    save_pickle("./data/models/levelTresholds.pkl", levelThresholds)
+    score = f1_score(label, oof_binary, average="macro")
+    print("\nf1-score of oof is:", score)
+
+    save_txt(f"./data/train/oof_score_{cfg.model.name}.txt", str(score))
+    save_pickle(
+        f"./data/models/levelTresholds_{cfg.model.name}.pkl", levelThresholds
+    )
 
 
 if __name__ == "__main__":

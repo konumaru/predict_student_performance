@@ -162,9 +162,9 @@ def create_features(
         "location_x_diff",
         "location_y_diff",
         "level",
-        "fullscreen",
-        "hq",
-        "music",
+        # "fullscreen",
+        # "hq",
+        # "music",
     ]
 
     agg_features = [
@@ -200,36 +200,40 @@ def create_features(
             for u in uniques
         ]
 
-        # agg_cols = ["elapsed_time", "location_x_diff", "location_y_diff"]
-        # for agg_col in agg_cols:
-        #     agg_features += [
-        #         pl.col(agg_col)
-        #         .filter(pl.col(col) == u)
-        #         .mean()
-        #         .alias(f"{col}_{u}_{agg_col}_mean")
-        #         for u in uniques
-        #     ]
-        #     agg_features += [
-        #         pl.col(agg_col)
-        #         .filter(pl.col(col) == u)
-        #         .std()
-        #         .alias(f"{col}_{u}_{agg_col}_std")
-        #         for u in uniques
-        #     ]
-        #     agg_features += [
-        #         pl.col(agg_col)
-        #         .filter(pl.col(col) == u)
-        #         .max()
-        #         .alias(f"{col}_{u}_{agg_col}_max")
-        #         for u in uniques
-        #     ]
-        #     agg_features += [
-        #         pl.col(agg_col)
-        #         .filter(pl.col(col) == u)
-        #         .min()
-        #         .alias(f"{col}_{u}_{agg_col}_min")
-        #         for u in uniques
-        #     ]
+        agg_cols = [
+            "elapsed_time",
+            # "location_x_diff",
+            # "location_y_diff",
+        ]
+        for agg_col in agg_cols:
+            agg_features += [
+                pl.col(agg_col)
+                .filter(pl.col(col) == u)
+                .mean()
+                .alias(f"{col}_{u}_{agg_col}_mean")
+                for u in uniques
+            ]
+            agg_features += [
+                pl.col(agg_col)
+                .filter(pl.col(col) == u)
+                .std()
+                .alias(f"{col}_{u}_{agg_col}_std")
+                for u in uniques
+            ]
+            agg_features += [
+                pl.col(agg_col)
+                .filter(pl.col(col) == u)
+                .max()
+                .alias(f"{col}_{u}_{agg_col}_max")
+                for u in uniques
+            ]
+            agg_features += [
+                pl.col(agg_col)
+                .filter(pl.col(col) == u)
+                .min()
+                .alias(f"{col}_{u}_{agg_col}_min")
+                for u in uniques
+            ]
 
     # Numeric features.
     agg_features += [
@@ -252,6 +256,113 @@ def create_features(
             pl.col(c).quantile(q_tile).alias(f"{c}_qtile_{q_tile}")
             for c in NUMS
         ]
+
+    if level_group == "5-12":
+        agg_features += [
+            pl.col("elapsed_time")
+            .filter(
+                (pl.col("text") == "Here's the log book.")
+                | (pl.col("fqid") == "logbook.page.bingo")
+            )
+            .apply(lambda s: s.max() - s.min())
+            .alias("logbook_bingo_duration"),
+            pl.col("index")
+            .filter(
+                (pl.col("text") == "Here's the log book.")
+                | (pl.col("fqid") == "logbook.page.bingo")
+            )
+            .apply(lambda s: s.max() - s.min())
+            .alias("logbook_bingo_indexCount"),
+            pl.col("elapsed_time")
+            .filter(
+                (
+                    (pl.col("event_name") == "navigate_click")
+                    & (pl.col("fqid") == "reader")
+                )
+                | (pl.col("fqid") == "reader.paper2.bingo")
+            )
+            .apply(lambda s: s.max() - s.min())
+            .alias("reader_bingo_duration"),
+            pl.col("index")
+            .filter(
+                (
+                    (pl.col("event_name") == "navigate_click")
+                    & (pl.col("fqid") == "reader")
+                )
+                | (pl.col("fqid") == "reader.paper2.bingo")
+            )
+            .apply(lambda s: s.max() - s.min())
+            .alias("reader_bingo_indexCount"),
+            pl.col("elapsed_time")
+            .filter(
+                (
+                    (pl.col("event_name") == "navigate_click")
+                    & (pl.col("fqid") == "journals")
+                )
+                | (pl.col("fqid") == "journals.pic_2.bingo")
+            )
+            .apply(lambda s: s.max() - s.min())
+            .alias("journals_bingo_duration"),
+            pl.col("index")
+            .filter(
+                (
+                    (pl.col("event_name") == "navigate_click")
+                    & (pl.col("fqid") == "journals")
+                )
+                | (pl.col("fqid") == "journals.pic_2.bingo")
+            )
+            .apply(lambda s: s.max() - s.min())
+            .alias("journals_bingo_indexCount"),
+        ]
+        if level_group == "13-22":
+            agg_features += [
+                pl.col("elapsed_time")
+                .filter(
+                    (
+                        (pl.col("event_name") == "navigate_click")
+                        & (pl.col("fqid") == "reader_flag")
+                    )
+                    | (
+                        pl.col("fqid")
+                        == "tunic.library.microfiche.reader_flag.paper2.bingo"
+                    )
+                )
+                .apply(lambda s: s.max() - s.min() if s.len() > 0 else 0)
+                .alias("reader_flag_duration"),
+                pl.col("index")
+                .filter(
+                    (
+                        (pl.col("event_name") == "navigate_click")
+                        & (pl.col("fqid") == "reader_flag")
+                    )
+                    | (
+                        pl.col("fqid")
+                        == "tunic.library.microfiche.reader_flag.paper2.bingo"
+                    )
+                )
+                .apply(lambda s: s.max() - s.min() if s.len() > 0 else 0)
+                .alias("reader_flag_indexCount"),
+                pl.col("elapsed_time")
+                .filter(
+                    (
+                        (pl.col("event_name") == "navigate_click")
+                        & (pl.col("fqid") == "journals_flag")
+                    )
+                    | (pl.col("fqid") == "journals_flag.pic_0.bingo")
+                )
+                .apply(lambda s: s.max() - s.min() if s.len() > 0 else 0)
+                .alias("journalsFlag_bingo_duration"),
+                pl.col("index")
+                .filter(
+                    (
+                        (pl.col("event_name") == "navigate_click")
+                        & (pl.col("fqid") == "journals_flag")
+                    )
+                    | (pl.col("fqid") == "journals_flag.pic_0.bingo")
+                )
+                .apply(lambda s: s.max() - s.min() if s.len() > 0 else 0)
+                .alias("journalsFlag_bingo_indexCount"),
+            ]
 
     results = data.groupby(["session_id"], maintain_order=True).agg(
         agg_features

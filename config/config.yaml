@@ -4,6 +4,7 @@ hydra:
   output_subdir: null
 
 seed: 42
+n_splits: 5
 debug: False
 is_eval: True
 

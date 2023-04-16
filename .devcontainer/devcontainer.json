@@ -61,7 +61,7 @@
     "python.linting.flake8Path": "/opt/conda/bin/pflake8",
     "python.linting.mypyEnabled": true,
     "python.linting.mypyPath": "/opt/conda/bin/mypy",
-    "python.formatting.provider": "/opt/conda/bin/black",
+    "python.formatting.provider": "black",
     "python.testing.cwd": "${workspaceFolder}",
     "jupyter.askForKernelRestart": false,
     "autoDocstring.docstringFormat": "google",

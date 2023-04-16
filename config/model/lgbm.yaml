@@ -1,0 +1,12 @@
+name: lgbm
+
+params:
+  boosting_type: gbdt
+  learning_rate: 0.05
+  n_estimators: 500
+  objective: binary
+  min_child_weight: 20
+  subsample: 1.0
+  colsample_bytree: 0.9
+  reg_alpha: 10
+  importance_type: gain
