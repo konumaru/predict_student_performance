@@ -146,6 +146,7 @@ def create_features(
     data = data.with_columns(columns)
 
     CATS = [
+        "level",
         "event_name",
         "name",
         # "text",
@@ -155,13 +156,13 @@ def create_features(
     ]
     NUMS = [
         "elapsed_time_diff",
+        "hover_duration",
         # "room_coor_x",
         # "room_coor_y",
         # "screen_coor_x",
         # "screen_coor_y",
         "location_x_diff",
         "location_y_diff",
-        "level",
         # "fullscreen",
         # "hq",
         # "music",
@@ -188,7 +189,7 @@ def create_features(
         "name": names + ["name_null"],
         "fqid": fqids + ["fiqd_null"],
         "room_fqid": room_fqid + ["room_fqid_null"],
-        # "room_fqid_1": room_fqid_1 + ["room_fqid_1_null"],
+        # "room_fqid_1": room_fqid_1 + ["room_fqid_2_null"],
         # "room_fqid_2": room_fqid_2 + ["room_fqid_2_null"],
     }
     for col, uniques in categorical_uniques.items():
@@ -201,7 +202,7 @@ def create_features(
         ]
 
         agg_cols = [
-            "elapsed_time",
+            "elapsed_time_diff",
             # "location_x_diff",
             # "location_y_diff",
         ]
@@ -211,6 +212,13 @@ def create_features(
                 .filter(pl.col(col) == u)
                 .mean()
                 .alias(f"{col}_{u}_{agg_col}_mean")
+                for u in uniques
+            ]
+            agg_features += [
+                pl.col(agg_col)
+                .filter(pl.col(col) == u)
+                .sum()
+                .alias(f"{col}_{u}_{agg_col}_sum")
                 for u in uniques
             ]
             agg_features += [
@@ -238,6 +246,9 @@ def create_features(
     # Numeric features.
     agg_features += [
         pl.col(c).drop_nulls().mean().alias(f"{c}_mean") for c in NUMS
+    ]
+    agg_features += [
+        pl.col(c).drop_nulls().sum().alias(f"{c}_sum") for c in NUMS
     ]
     agg_features += [
         pl.col(c).drop_nulls().median().alias(f"{c}_median") for c in NUMS

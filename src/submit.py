@@ -77,6 +77,9 @@ def main(cfg: DictConfig) -> None:
         )
         data = labels.join(features, how="left", on="session_id")
 
+        cols_drop = load_pickle(input_dir / f"cols_drop_{level_group}.pkl")
+        data = data.drop(cols_drop)
+
         _featrues = (
             data.filter(pl.col("level_group") == level_group)
             .select(

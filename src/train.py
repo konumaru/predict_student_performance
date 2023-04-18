@@ -15,7 +15,7 @@ from xgboost import XGBClassifier
 
 from metric import f1_score_with_threshold
 from utils import timer
-from utils.io import load_pickle, save_pickle, save_txt
+from utils.io import save_pickle, save_txt
 
 
 def fit_cat(

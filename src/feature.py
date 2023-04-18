@@ -1,6 +1,6 @@
 import os
 import pathlib
-from typing import Tuple
+from typing import List, Tuple
 
 import hydra
 import pandas as pd
@@ -9,6 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from common import create_features, parse_labels
 from utils import timer
+from utils.io import save_pickle
 
 
 class TrainTimeSeriesIterator:
@@ -34,6 +35,13 @@ class TrainTimeSeriesIterator:
             pl.col("session_id").str.contains(regex)
         )
         return batch_train.to_pandas(), batch_labels.to_pandas()
+
+
+def get_cols_high_null_ratio(
+    data: pl.DataFrame, threshold: float = 0.9
+) -> List:
+    null_ratio = (data.null_count() / len(data)).to_pandas().T
+    return null_ratio.index[(null_ratio > threshold)[0]].tolist()
 
 
 @hydra.main(
@@ -71,6 +79,11 @@ def main(cfg: DictConfig) -> None:
         results = batch_labels.join(
             features, on=["session_id", "level_group"], how="left"
         )
+
+        cols_drop = get_cols_high_null_ratio(results)
+        save_pickle(output_dir / f"cols_drop_{level_group}.pkl", cols_drop)
+
+        results = results.drop(cols_drop)
         results.write_parquet(output_dir / f"features_{level_group}.parquet")
 
 
