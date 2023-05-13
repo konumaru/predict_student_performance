@@ -139,3 +139,4 @@ data/.hydra/
 *.json
 data/models/model-*
 data/upload/model-*
+multimodal/*

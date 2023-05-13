@@ -62,7 +62,7 @@ def main(cfg: DictConfig) -> None:
 
     features = create_features(train, "./data/preprocessing")
     cols_drop = get_cols_high_null_ratio(features)
-    save_pickle(output_dir / "cols_drop.pkl")
+    save_pickle(output_dir / "cols_drop.pkl", cols_drop)
     features = features.drop(cols_drop)
 
     labels_parsed = parse_labels(labels)
