@@ -61,29 +61,31 @@ def main(cfg: DictConfig) -> None:
     ).to_pandas()
 
     features = create_features(train, "./data/preprocessing")
-    cols_drop = get_cols_high_null_ratio(features)
-    save_pickle(output_dir / "cols_drop.pkl")
-    features = features.drop(cols_drop)
-
     labels_parsed = parse_labels(labels)
 
     results = labels_parsed.join(
         features, on=["session_id", "level_group"], how="left"
     )
     results = results.with_columns(
-        pl.col("level_group")
-        .map_dict({"0-4": 0, "5-12": 1, "13-22": 2}, default="unknown")
-        .cast(pl.Int64)
-        .alias("level_group"),
-    )
-    results = results.with_columns(
         pl.exclude(
             "session_id", "session_level", "correct", "level_group", "level"
         ).cast(pl.Float32),
         pl.col("level").cast(pl.Int32),
-        pl.col("level_group").cast(pl.Int32),
     )
-    results.write_parquet(output_dir / "features.parquet")
+
+    print("The Number of Features:", results.shape[1])
+    print(results)
+
+    for level in range(1, 23):
+        results_by_level = results.filter(pl.col("level") == level)
+
+        cols_drop = get_cols_high_null_ratio(results_by_level)
+        save_pickle(output_dir / f"colsDrop-level_{level}.pkl", cols_drop)
+        results_by_level = results_by_level.drop(cols_drop)
+
+        results_by_level.write_parquet(
+            output_dir / f"features-level_{level}.parquet"
+        )
 
 
 if __name__ == "__main__":

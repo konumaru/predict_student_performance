@@ -4,15 +4,12 @@ params:
   booster: gbtree
   gpu_id: 0
   tree_method: gpu_hist
-  # tree_method: hist
   objective: binary:logistic
   eval_metric: logloss
-  learning_rate: 0.02
-  n_estimators: 1000
+  learning_rate: 0.05
+  n_estimators: 500
   early_stopping_rounds: 50
-  max_depth: 4
   min_child_weight: 20
-  subsample: 0.8
-  colsample_bytree: 0.5
+  subsample: 0.95
+  colsample_bytree: 0.8
   reg_alpha: 8
-  enable_categorical: True

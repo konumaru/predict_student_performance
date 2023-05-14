@@ -1,5 +1,5 @@
 import pathlib
-from typing import List
+from typing import Any, List
 
 import pandas as pd
 import polars as pl
@@ -87,15 +87,15 @@ def create_features(
         "name": name + ["name_null"],
         # "text": text + ["text_null"],
         "fqid": fqid + ["fiqd_null"],
-        # "room_fqid": room_fqid + ["room_fqid_null"],
+        "room_fqid": room_fqid + ["room_fqid_null"],
         # "text_fqid": text_fqid + ["text_fqid_null"],
         "level": list(range(1, 23)),
     }
 
-    agg_features = [
+    agg_features: List[Any] = []
+    agg_features += [
         pl.col("index").count().alias("nrows"),
     ]
-
     for col, uniques in categorical_uniques.items():
         agg_features += [
             pl.col(col).drop_nulls().n_unique().alias(f"nunique_{col}")
@@ -110,8 +110,8 @@ def create_features(
 
         agg_cols = [
             "elapsed_time_diff",
-            # "location_x_diff",
-            # "location_y_diff",
+            "location_x_diff",
+            "location_y_diff",
         ]
         for agg_col in agg_cols:
             agg_features += [
@@ -135,45 +135,27 @@ def create_features(
                 .alias(f"{col}_{u}_{agg_col}_std")
                 for u in uniques
             ]
-            agg_features += [
-                pl.col(agg_col)
-                .filter(pl.col(col) == u)
-                .max()
-                .alias(f"{col}_{u}_{agg_col}_max")
-                for u in uniques
-            ]
-            agg_features += [
-                pl.col(agg_col)
-                .filter(pl.col(col) == u)
-                .min()
-                .alias(f"{col}_{u}_{agg_col}_min")
-                for u in uniques
-            ]
-            agg_features += [
-                pl.col("elapsed_time")
-                .filter(pl.col(col) == u)
-                .first()
-                .alias(f"{col}_{u}_{agg_col}_first")
-                for u in uniques
-            ]
-            agg_features += [
-                pl.col("elapsed_time")
-                .filter(pl.col(col) == u)
-                .last()
-                .alias(f"{col}_{u}_{agg_col}_last")
-                for u in uniques
-            ]
+            # agg_features += [
+            #     pl.col(agg_col)
+            #     .filter(pl.col(col) == u)
+            #     .max()
+            #     .alias(f"{col}_{u}_{agg_col}_max")
+            #     for u in uniques
+            # ]
+            # agg_features += [
+            #     pl.col(agg_col)
+            #     .filter(pl.col(col) == u)
+            #     .min()
+            #     .alias(f"{col}_{u}_{agg_col}_min")
+            #     for u in uniques
+            # ]
 
     # Numeric features.
     NUMS = [
         "elapsed_time_diff",
-        # "hover_duration",
-        # "room_coor_x",
-        # "room_coor_y",
-        # "screen_coor_x",
-        # "screen_coor_y",
         "location_x_diff",
         "location_y_diff",
+        # "hover_duration",
         # "fullscreen",
         # "hq",
         # "music",
@@ -185,9 +167,9 @@ def create_features(
     agg_features += [
         pl.col(c).drop_nulls().sum().alias(f"{c}_sum") for c in NUMS
     ]
-    agg_features += [
-        pl.col(c).drop_nulls().median().alias(f"{c}_median") for c in NUMS
-    ]
+    # agg_features += [
+    #     pl.col(c).drop_nulls().median().alias(f"{c}_median") for c in NUMS
+    # ]
     agg_features += [
         pl.col(c).drop_nulls().std().alias(f"{c}_std") for c in NUMS
     ]
@@ -197,7 +179,13 @@ def create_features(
     agg_features += [
         pl.col(c).drop_nulls().max().alias(f"{c}_max") for c in NUMS
     ]
-    for q_tile in [0.25, 0.5, 0.75]:
+    agg_features += [
+        pl.col(c).drop_nulls().first().alias(f"{c}_first") for c in NUMS
+    ]
+    agg_features += [
+        pl.col(c).drop_nulls().last().alias(f"{c}_last") for c in NUMS
+    ]
+    for q_tile in [0.1, 0.2, 0.5, 0.75]:
         agg_features += [
             pl.col(c).quantile(q_tile).alias(f"{c}_qtile_{q_tile}")
             for c in NUMS

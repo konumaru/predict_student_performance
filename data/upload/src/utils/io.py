@@ -17,3 +17,9 @@ def save_pickle(filepath: Union[str, pathlib.Path], data: Any) -> None:
 def save_txt(filepath: Union[str, pathlib.Path], data: Any) -> None:
     with open(filepath, "w") as f:
         f.write(data)
+
+
+def load_txt(filepath: Union[str, pathlib.Path]) -> Any:
+    with open(filepath, "r") as f:
+        data = f.read()
+    return data

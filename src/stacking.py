@@ -1,4 +1,5 @@
 import pathlib
+from collections import defaultdict
 from typing import Tuple
 
 import hydra
@@ -31,29 +32,40 @@ def main(cfg: DictConfig) -> None:
     input_dir = pathlib.Path("./data/train/")
     output_dir = pathlib.Path("./data/models/")
 
-    label = load_pickle(str(input_dir / "label-xgb.pkl")).ravel()
+    threshold_levels = defaultdict(float)
+    pred_all_level = []
+    label_all_level = []
+    for level in range(1, 19):
+        print(f"\n>> train level={level}")
+        label = load_pickle(
+            str(input_dir / f"label-xgb-level_{level}.pkl")
+        ).ravel()
+        oof_xgb = load_pickle(str(input_dir / f"oof-xgb-level_{level}.pkl"))
+        oof_lgbm = load_pickle(str(input_dir / f"oof-lgbm-level_{level}.pkl"))
 
-    oof_xgb = load_pickle(str(input_dir / "oof-xgb.pkl"))
-    oof_lgbm = load_pickle(str(input_dir / "oof-lgbm.pkl"))
+        X = np.concatenate(
+            (oof_xgb.reshape(-1, 1), oof_lgbm.reshape(-1, 1)), axis=1
+        )
 
-    X = np.concatenate(
-        (oof_xgb.reshape(-1, 1), oof_lgbm.reshape(-1, 1)), axis=1
-    )
+        clf = Ridge(alpha=1.0)
+        clf.fit(X, label)
+        print("Weights of [xgb, lgbm]: ", clf.coef_)
 
-    clf = Ridge(alpha=1.0)
-    clf.fit(X, label)
-    print("Weights of [xgb, lgbm]: ", clf.coef_)
+        save_pickle(str(output_dir / f"stack-ridge-level_{level}.pkl"), clf)
 
-    save_pickle(str(output_dir / "stack-ridge.pkl"), clf)
+        pred = clf.predict(X)
+        score, threshold = evaluate(label, pred)
+        threshold_levels[level] = threshold
 
-    pred = clf.predict(X)
-    score, threshold = evaluate(label, pred)
-    print("f1-score:", score, f"| threshold={threshold:4f}")
+        pred_all_level.append((pred > threshold).astype(int))
+        label_all_level.append(label)
 
-    save_pickle(str(output_dir / "levelTresholds_stacking.pkl"), threshold)
-
-    save_txt("./data/train/oof_score_stacking.txt", str(score))
-    print("\nf1-score of oof is:", score)
+    save_pickle(output_dir / "treshold_stacking.pkl", threshold_levels)
+    pred = np.concatenate(pred_all_level)
+    label = np.concatenate(label_all_level)
+    score = f1_score(label, pred, average="macro")
+    save_txt("./data/train/score_stacking.txt", str(score))
+    print("f1-score:", score)
 
 
 if __name__ == "__main__":
