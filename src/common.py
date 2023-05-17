@@ -11,29 +11,32 @@ def drop_null_columns(data: pl.DataFrame, columns: List) -> pl.DataFrame:
     return data.drop(columns)
 
 
+"""
+- 特徴量は規定されたlevel_groupごとに生成する
+- labelは規定されたlevel_groupとは異なる範囲で分割する
+- 上記の異なるlevel_groupの定義を持つデータをjoinする
+"""
+
+
 # ====================
 # Create features
 # ====================
 def parse_labels(labels: pd.DataFrame) -> pl.DataFrame:
+    labels.rename(columns={"session_id": "session_level"}, inplace=True)
+    labels = labels.assign(
+        level=labels["session_level"].str.extract(r"q(\d+)").astype("int64"),
+        session_id=labels["session_level"]
+        .str.extract(r"(\d+)")[0]
+        .astype(int),
+    )
+    labels.drop(columns=["session_level"], inplace=True)
+
     labels_pl = pl.from_pandas(labels)
-    labels_pl = labels_pl.rename({"session_id": "session_level"})
     labels_pl = labels_pl.with_columns(
-        labels_pl["session_level"]
-        .str.split_exact("_", 1)
-        .struct.rename_fields(["session_id", "level"])
-        .alias("fields")
-        .to_frame()
-        .unnest("fields")
-    )
-    labels_pl = labels_pl.with_columns(
-        pl.col("session_id").cast(pl.Int64).alias("session_id"),
-        pl.col("level").str.replace("q", "").cast(pl.Int32).alias("level"),
-    )
-    labels_pl = labels_pl.with_columns(
-        pl.when(pl.col("level") <= 4)
+        pl.when(pl.col("level") < 4)
         .then("0-4")
         .otherwise(
-            pl.when(pl.col("level") <= 12).then("5-12").otherwise("13-22")
+            pl.when(pl.col("level") < 14).then("5-12").otherwise("13-22")
         )
         .alias("level_group")
     )
@@ -78,10 +81,10 @@ def create_features(
     uniques_dir = pathlib.Path(uniques_dirpath)
     event_name = load_pickle(str(uniques_dir / "uniques_event_name.pkl"))
     name = load_pickle(str(uniques_dir / "uniques_name.pkl"))
-    text = load_pickle(str(uniques_dir / "uniques_text.pkl"))
+    # text = load_pickle(str(uniques_dir / "uniques_text.pkl"))
     fqid = load_pickle(str(uniques_dir / "uniques_fqid.pkl"))
     room_fqid = load_pickle(str(uniques_dir / "uniques_room_fqid.pkl"))
-    text_fqid = load_pickle(str(uniques_dir / "uniques_text_fqid.pkl"))
+    # text_fqid = load_pickle(str(uniques_dir / "uniques_text_fqid.pkl"))
     categorical_uniques = {
         "event_name": event_name + ["event_name_null"],
         "name": name + ["name_null"],
@@ -298,5 +301,9 @@ def create_features(
         .alias("journalsFlag_bingo_indexCount"),
     ]
 
-    results = data.groupby(agg_groups, maintain_order=True).agg(agg_features)
+    results = (
+        data.groupby(agg_groups, maintain_order=True)
+        .agg(agg_features)
+        .fill_nan(-1)
+    )
     return results

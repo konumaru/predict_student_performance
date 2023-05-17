@@ -6,7 +6,6 @@ import hydra
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 from sklearn.linear_model import Ridge
-from sklearn.metrics import f1_score
 
 from metric import f1_score_with_threshold
 from utils import timer
@@ -57,15 +56,18 @@ def main(cfg: DictConfig) -> None:
         score, threshold = evaluate(label, pred)
         threshold_levels[level] = threshold
 
-        pred_all_level.append((pred > threshold).astype(int))
+        pred_all_level.append(pred)
         label_all_level.append(label)
 
     save_pickle(output_dir / "treshold_stacking.pkl", threshold_levels)
-    pred = np.concatenate(pred_all_level)
+
+    print("\n##### Evaluate #####\n")
     label = np.concatenate(label_all_level)
-    score = f1_score(label, pred, average="macro")
-    save_txt("./data/train/score_stacking.txt", str(score))
-    print("f1-score:", score)
+    pred = np.concatenate(pred_all_level)
+    score, threshold = evaluate(label, pred)
+    print("f1-score of oof is:", score)
+    save_txt(output_dir / "score-stacking.txt", str(score))
+    save_txt(output_dir / "threshold-overall-stacking.txt", str(threshold))
 
 
 if __name__ == "__main__":

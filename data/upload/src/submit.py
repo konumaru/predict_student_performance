@@ -4,6 +4,7 @@ import subprocess
 import hydra
 import lightgbm
 import numpy as np
+import pandas as pd
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
 from xgboost import XGBClassifier
@@ -11,7 +12,7 @@ from xgboost import XGBClassifier
 from common import create_features, parse_labels
 from data.raw import jo_wilder_310 as jo_wilder  # type: ignore
 from utils import timer
-from utils.io import load_pickle
+from utils.io import load_pickle, load_txt
 
 N_FOLD = 5
 
@@ -47,6 +48,35 @@ def predict_xgb(
     return np.mean(pred, axis=0)
 
 
+def check_test_data(
+    test: pd.DataFrame, sample_submission: pd.DataFrame
+) -> None:
+    grp = test["level_group"].values[0]
+    submission_levels = (
+        sample_submission["session_id"].str.extract(r"q(\d+)").astype(int)
+    ).to_numpy()
+    submission_session_id = (
+        sample_submission["session_id"]
+        .str.extract(r"(\d+)")[0]
+        .unique()
+        .astype(int)
+    )
+
+    assert len(test) > 0
+    assert test["level_group"].nunique() == 1
+    assert test["session_id"].nunique() == 1
+
+    assert test["session_id"].unique() == submission_session_id
+
+    # NOTE: The values of level_group is not same as level range.
+    # limits = {"0-4": (1, 4), "5-12": (4, 12), "13-22": (13, 18)}
+    limits = {"0-4": (1, 4), "5-12": (4, 14), "13-22": (14, 19)}
+
+    for level in submission_levels:
+        level_min, level_max = limits[grp]
+        assert level_min <= level <= level_max
+
+
 @hydra.main(
     config_path="../config", config_name="config.yaml", version_base="1.3"
 )
@@ -55,62 +85,34 @@ def main(cfg: DictConfig) -> None:
 
     input_dir = pathlib.Path("./data/upload")
 
-    threshold_levels = load_pickle(input_dir / "treshold_stacking.pkl")
-    limits = {"0-4": (1, 4), "5-12": (5, 12), "13-22": (13, 18)}
+    threshold = float(load_txt(input_dir / "threshold-overall-stacking.txt"))
 
     env = jo_wilder.make_env()
     iter_test = env.iter_test()
     for test, sample_submission in iter_test:
-        level_group = test.level_group.values[0]
-        level_min, level_max = limits[level_group]
-
+        check_test_data(test, sample_submission)
         features = create_features(pl.from_pandas(test), str(input_dir))
         labels = parse_labels(sample_submission)
 
-        for level in range(level_min, level_max + 1):
+        for level in labels["level"].unique():
             cols_drop = load_pickle(input_dir / f"colsDrop-level_{level}.pkl")
-            data = labels.join(
-                features.drop(cols_drop),
-                on=["session_id", "level_group"],
-                how="left",
-            )
-            data = data.with_columns(
-                pl.col("level_group")
-                .map_dict({"0-4": 0, "5-12": 1, "13-22": 2}, default="unknown")
-                .cast(pl.Int64)
-                .alias("level_group"),
-            )
-            X = (
-                data.filter(pl.col("level") == level)
-                .select(
-                    pl.exclude(
-                        [
-                            "session_level",
-                            "session_id",
-                            "correct",
-                            "level",
-                            "level_group",
-                        ]
-                    )
-                )
-                .to_numpy()
+            cols_drop += ["session_id", "level_group"]
+            X = features.drop(cols_drop).to_numpy()
+
+            pred_xgb = predict_xgb(X, input_dir, level)
+            pred_lgbm = predict_lgbm(X, input_dir, level)
+            X_pred = np.concatenate(
+                (pred_xgb.reshape(-1, 1), pred_lgbm.reshape(-1, 1)), axis=1
             )
 
-            if len(X) > 0:
-                pred_xgb = predict_xgb(X, input_dir, level)
-                pred_lgbm = predict_lgbm(X, input_dir, level)
-                X_pred = np.concatenate(
-                    (pred_xgb.reshape(-1, 1), pred_lgbm.reshape(-1, 1)), axis=1
-                )
+            clf = load_pickle(
+                str(input_dir / f"stack-ridge-level_{level}.pkl")
+            )
+            pred = clf.predict(X_pred)
 
-                clf = load_pickle(
-                    str(input_dir / f"stack-ridge-level_{level}.pkl")
-                )
-                pred = clf.predict(X_pred)
-
-                sample_submission.loc[
-                    (labels["level"] == level).to_numpy(), "correct"
-                ] = (pred > threshold_levels[level]).astype(np.int8)
+            sample_submission.loc[
+                (labels["level"] == level).to_numpy(), "correct"
+            ] = (pred > threshold).astype(np.int8)
 
         env.predict(sample_submission)
 

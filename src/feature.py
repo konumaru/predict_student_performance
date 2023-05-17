@@ -6,6 +6,7 @@ import hydra
 import pandas as pd
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
+from rich.progress import track
 
 from common import create_features, parse_labels
 from utils import timer
@@ -43,6 +44,16 @@ def get_cols_high_null_ratio(
     return null_ratio.index[(null_ratio > threshold)[0]].tolist()
 
 
+def get_cols_high_unique_ratio(
+    data: pl.DataFrame, threshold: float = 0.2
+) -> List:
+    cols = []
+    for c in data.columns:
+        if data[c].n_unique() / len(data) < threshold:
+            cols.append(c)
+    return cols
+
+
 @hydra.main(
     config_path="../config", config_name="config.yaml", version_base="1.3"
 )
@@ -76,10 +87,15 @@ def main(cfg: DictConfig) -> None:
     print("The Number of Features:", results.shape[1])
     print(results)
 
-    for level in range(1, 23):
+    for level in track(range(1, 19)):
         results_by_level = results.filter(pl.col("level") == level)
 
         cols_drop = get_cols_high_null_ratio(results_by_level)
+        cols_drop += get_cols_high_unique_ratio(
+            results_by_level.select(
+                pl.exclude("session_id", "level_group", "level", "correct")
+            )
+        )
         save_pickle(output_dir / f"colsDrop-level_{level}.pkl", cols_drop)
         results_by_level = results_by_level.drop(cols_drop)
 

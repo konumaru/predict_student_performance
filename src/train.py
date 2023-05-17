@@ -11,7 +11,6 @@ import polars as pl
 from catboost import CatBoostClassifier
 from lightgbm import LGBMClassifier
 from omegaconf import DictConfig, OmegaConf
-from sklearn.metrics import f1_score
 from sklearn.model_selection import GroupKFold
 from xgboost import XGBClassifier
 
@@ -193,13 +192,20 @@ def main(cfg: DictConfig) -> None:
         oof_binary = (oof > threshold).astype(int)
         oof_all_level_binary.append(oof_binary)
 
+    save_pickle(
+        output_dir / f"threshold_{cfg.model.name}.pkl", threshold_levels
+    )
     # Evaluate oof.
     print("\n##### Evaluate #####\n")
     label = np.concatenate(label_all_level)
-    oof = np.concatenate(oof_all_level_binary)
-    score = f1_score(label, oof, average="macro")
+    oof = np.concatenate(oof_all_level)
+    score, threshold = evaluate(label, oof)
+    # score = f1_score(label, oof, average="macro")
     print("f1-score of oof is:", score)
     save_txt(output_dir / f"score-{cfg.model.name}.txt", str(score))
+    save_txt(
+        output_dir / f"threshold-overall-{cfg.model.name}.txt", str(threshold)
+    )
 
 
 if __name__ == "__main__":
