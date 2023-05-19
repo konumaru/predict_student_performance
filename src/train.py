@@ -2,21 +2,21 @@ import gc
 import os
 import pathlib
 from collections import defaultdict
-from typing import Tuple
+from typing import Tuple, Union
 
 import hydra
 import lightgbm
 import numpy as np
-import polars as pl
+import pandas as pd
 from catboost import CatBoostClassifier
 from lightgbm import LGBMClassifier
 from omegaconf import DictConfig, OmegaConf
-from sklearn.model_selection import GroupKFold
+from sklearn.utils.class_weight import compute_sample_weight
 from xgboost import XGBClassifier
 
 from metric import f1_score_with_threshold
 from utils import timer
-from utils.io import save_pickle, save_txt
+from utils.io import load_pickle, save_pickle, save_txt
 
 
 def fit_cat(
@@ -26,6 +26,8 @@ def fit_cat(
     X_valid,
     y_valid,
     save_filepath: str,
+    weight_train: Union[np.ndarray, None] = None,
+    weight_valid: Union[np.ndarray, None] = None,
     seed: int = 42,
 ) -> CatBoostClassifier:
     model = CatBoostClassifier(**params)
@@ -35,6 +37,7 @@ def fit_cat(
         y_train,
         eval_set=[(X_train, y_train), (X_valid, y_valid)],
         use_best_model=True,
+        sample_weight=weight_train,
     )
     model.save_model(save_filepath)
     return model
@@ -47,6 +50,8 @@ def fit_lgbm(
     X_valid,
     y_valid,
     save_filepath: str,
+    weight_train: Union[np.ndarray, None] = None,
+    weight_valid: Union[np.ndarray, None] = None,
     seed: int = 42,
 ) -> LGBMClassifier:
     model = LGBMClassifier(**params)
@@ -54,11 +59,15 @@ def fit_lgbm(
     model.fit(
         X_train,
         y_train,
+        sample_weight=weight_train,
+        eval_sample_weight=weight_valid,
         eval_set=[(X_train, y_train), (X_valid, y_valid)],
         eval_metric="binary_logloss",
         callbacks=[lightgbm.log_evaluation(50), lightgbm.early_stopping(50)],
     )
-    model.booster_.save_model(save_filepath)
+    model.booster_.save_model(
+        save_filepath + ".txt", num_iteration=model.best_iteration_
+    )
     return model
 
 
@@ -69,13 +78,19 @@ def fit_xgb(
     X_valid,
     y_valid,
     save_filepath: str,
+    weight_train: Union[np.ndarray, None] = None,
+    weight_valid: Union[np.ndarray, None] = None,
     seed: int = 42,
 ) -> XGBClassifier:
+    weight_train = compute_sample_weight("balanced", y_train)
+
     model = XGBClassifier(**params)
     model.set_params(random_state=seed)
     model.fit(
         X_train,
         y_train,
+        sample_weight=weight_train,
+        sample_weight_eval_set=weight_valid,
         eval_set=[(X_train, y_train), (X_valid, y_valid)],
         verbose=50,
     )
@@ -84,34 +99,20 @@ def fit_xgb(
 
 
 def train(
-    cfg: DictConfig, data: pl.DataFrame, level: int
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    X = (
-        data.select(
-            pl.exclude(
-                "session_level",
-                "correct",
-                "session_id",
-                "level",
-                "level_group",
-            )
-        )
-        .to_pandas()
-        .reset_index(drop=True)
-    )
-
-    y = data.select(pl.col("correct")).to_numpy().ravel()
-    session_id = data.select(pl.col("session_id")).to_numpy()
-
-    oof = np.zeros(len(y))
-    folds = np.zeros(len(y))
-    cv = GroupKFold(n_splits=cfg.n_splits)
-    for fold, (train_idx, valid_idx) in enumerate(
-        cv.split(X, groups=session_id)
-    ):
+    cfg: DictConfig, feature_dir: pathlib.Path, output_dir: pathlib.Path
+) -> None:
+    for fold in range(cfg.n_splits):
         print(f">>>> Train fold={fold}")
-        X_train, X_valid = X.iloc[train_idx], X.iloc[valid_idx]
-        y_train, y_valid = y[train_idx], y[valid_idx]
+        X_train = pd.read_parquet(feature_dir / f"X_train_fold_{fold}.parquet")
+        X_valid = pd.read_parquet(feature_dir / f"X_valid_fold_{fold}.parquet")
+        y_train = load_pickle(feature_dir / f"y_train_fold_{fold}.pkl").ravel()
+        y_valid = load_pickle(feature_dir / f"y_valid_fold_{fold}.pkl").ravel()
+
+        level_train = X_train["level"].to_numpy()
+        level_valid = X_valid["level"].to_numpy()
+
+        X_train.drop(columns=["level"], inplace=True)
+        X_valid.drop(columns=["level"], inplace=True)
 
         if cfg.model.name == "xgb":
             fit_model = fit_xgb
@@ -122,30 +123,33 @@ def train(
         else:
             fit_model = fit_xgb
 
-        suffix = f"level-{level}_fold-{fold}"
-        model = fit_model(
-            cfg.model.params,
-            X_train,
-            y_train,
-            X_valid,
-            y_valid,
-            save_filepath=os.path.join(
-                hydra.utils.get_original_cwd(),
-                "data",
-                "models",
-                f"model-{cfg.model.name}_{suffix}",
-            ),
-            seed=cfg.seed,
-        )
+        suffix = f"{cfg.model.name}_fold_{fold}"
+        pred = np.zeros(len(y_valid), dtype=np.float32)
+        for level in range(1, 19):
+            print(f"training level={level}")
+            flag_train = level_train == level
+            flag_valid = level_valid == level
 
-        pred = model.predict_proba(X_valid)[:, 1]
-        oof[valid_idx] = pred
-        folds[valid_idx] = fold
+            model = fit_model(
+                cfg.model.params,
+                X_train[flag_train],
+                y_train[flag_train],
+                X_valid[flag_valid],
+                y_valid[flag_valid],
+                save_filepath=os.path.join(
+                    hydra.utils.get_original_cwd(),
+                    "data",
+                    "models",
+                    f"model_{suffix}_level_{level}",
+                ),
+                seed=cfg.seed,
+            )
+            pred[flag_valid] = model.predict_proba(X_valid[flag_valid])[:, 1]
+
+        save_pickle(output_dir / f"y_pred_{suffix}.pkl", pred)
 
         del X_train, X_valid, y_train, y_valid
         gc.collect()
-
-    return oof, y, folds
 
 
 def evaluate(y_true, y_pred) -> Tuple[float, float]:
@@ -168,40 +172,46 @@ def main(cfg: DictConfig) -> None:
     feature_dir = pathlib.Path("./data/feature")
 
     print("\n##### Train Model #####\n")
+    train(cfg, feature_dir, output_dir)
+
+    print("\n##### Evaluate #####\n")
+    oofs = []
+    labels = []
+    levels = []
+    for fold in range(cfg.n_splits):
+        oofs.append(
+            load_pickle(
+                output_dir / f"y_pred_{cfg.model.name}_fold_{fold}.pkl"
+            )
+        )
+        labels.append(load_pickle(feature_dir / f"y_valid_fold_{fold}.pkl"))
+        X_valid = pd.read_parquet(feature_dir / f"X_valid_fold_{fold}.parquet")
+        levels.append(X_valid["level"].to_numpy())
+
+    oof = np.concatenate(oofs)
+    labels = np.concatenate(labels)
+    levels = np.concatenate(levels)
+
     threshold_levels = defaultdict(float)
-    oof_all_level = []
-    oof_all_level_binary = []
-    label_all_level = []
+
     for level in range(1, 19):
-        print(f"\n>> train level={level}")
-        data = pl.read_parquet(feature_dir / f"features-level_{level}.parquet")
-        oof, label, fold = train(cfg, data, level)
-
-        suffix = f"{cfg.model.name}-level_{level}"
-        save_pickle(str(output_dir / f"oof-{suffix}.pkl"), oof)
-        save_pickle(str(output_dir / f"label-{suffix}.pkl"), label)
-        save_pickle(str(output_dir / f"fold-{suffix}.pkl"), fold)
-
-        oof_all_level.append(oof)
-        label_all_level.append(label)
-
-        score, threshold = evaluate(label, oof)
+        score, threshold = evaluate(
+            labels[levels == level], oof[levels == level]
+        )
         threshold_levels[level] = threshold
-        print("\nf1-score of oof is:", score)
-
-        oof_binary = (oof > threshold).astype(int)
-        oof_all_level_binary.append(oof_binary)
+        print(
+            f"f1-score of q{level}:",
+            round(score, 6),
+            "threshold:",
+            round(threshold, 4),
+        )
 
     save_pickle(
         output_dir / f"threshold_{cfg.model.name}.pkl", threshold_levels
     )
     # Evaluate oof.
-    print("\n##### Evaluate #####\n")
-    label = np.concatenate(label_all_level)
-    oof = np.concatenate(oof_all_level)
-    score, threshold = evaluate(label, oof)
-    # score = f1_score(label, oof, average="macro")
-    print("f1-score of oof is:", score)
+    score, threshold = evaluate(labels, oof)
+    print("\nf1-score of oof is:", score)
     save_txt(output_dir / f"score-{cfg.model.name}.txt", str(score))
     save_txt(
         output_dir / f"threshold-overall-{cfg.model.name}.txt", str(threshold)

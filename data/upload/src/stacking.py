@@ -1,6 +1,5 @@
 import pathlib
-from collections import defaultdict
-from typing import Tuple
+from typing import List, Tuple
 
 import hydra
 import numpy as np
@@ -22,52 +21,64 @@ def evaluate(y_true, y_pred) -> Tuple[float, float]:
     return best_score, best_threshold
 
 
+def load_oof(folds: List[int]) -> Tuple[np.ndarray, np.ndarray]:
+    input_dir = pathlib.Path("./data/train/")
+    feature_dir = pathlib.Path("./data/feature/")
+    oofs_xgb = []
+    oofs_lgbm = []
+    labels = []
+    for fold in folds:
+        oofs_xgb.append(load_pickle(input_dir / f"y_pred_xgb_fold_{fold}.pkl"))
+        oofs_lgbm.append(
+            load_pickle(input_dir / f"y_pred_lgbm_fold_{fold}.pkl")
+        )
+        labels.append(load_pickle(feature_dir / f"y_valid_fold_{fold}.pkl"))
+    oof = np.concatenate(
+        [
+            np.concatenate(oofs_xgb).reshape(-1, 1),
+            np.concatenate(oofs_lgbm).reshape(-1, 1),
+        ],
+        axis=1,
+    )
+    label = np.concatenate(labels)
+    return oof, label
+
+
 @hydra.main(
     config_path="../config", config_name="config.yaml", version_base="1.3"
 )
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
-    input_dir = pathlib.Path("./data/train/")
     output_dir = pathlib.Path("./data/models/")
 
-    threshold_levels = defaultdict(float)
-    pred_all_level = []
-    label_all_level = []
-    for level in range(1, 19):
-        print(f"\n>> train level={level}")
-        label = load_pickle(
-            str(input_dir / f"label-xgb-level_{level}.pkl")
-        ).ravel()
-        oof_xgb = load_pickle(str(input_dir / f"oof-xgb-level_{level}.pkl"))
-        oof_lgbm = load_pickle(str(input_dir / f"oof-lgbm-level_{level}.pkl"))
-
-        X = np.concatenate(
-            (oof_xgb.reshape(-1, 1), oof_lgbm.reshape(-1, 1)), axis=1
+    labels = []
+    oofs = []
+    clfs = []
+    for fold in range(cfg.n_splits):
+        X_train, y_train = load_oof(
+            [i for i in range(cfg.n_splits) if i != fold]
         )
+        X_valid, y_valid = load_oof([fold])
 
         clf = Ridge(alpha=1.0)
-        clf.fit(X, label)
+        clf.fit(X_train, y_train)
+        clfs.append(clf)
+
+        pred = clf.predict(X_valid)
+        oofs.append(pred)
+        labels.append(y_valid)
         print("Weights of [xgb, lgbm]: ", clf.coef_)
 
-        save_pickle(str(output_dir / f"stack-ridge-level_{level}.pkl"), clf)
-
-        pred = clf.predict(X)
-        score, threshold = evaluate(label, pred)
-        threshold_levels[level] = threshold
-
-        pred_all_level.append(pred)
-        label_all_level.append(label)
-
-    save_pickle(output_dir / "treshold_stacking.pkl", threshold_levels)
+    save_pickle(str(output_dir / "stacking_ridge.pkl"), clfs)
 
     print("\n##### Evaluate #####\n")
-    label = np.concatenate(label_all_level)
-    pred = np.concatenate(pred_all_level)
-    score, threshold = evaluate(label, pred)
+    oof = np.concatenate(oofs)
+    label = np.concatenate(labels)
+    score, threshold = evaluate(label, oof)
     print("f1-score of oof is:", score)
-    save_txt(output_dir / "score-stacking.txt", str(score))
-    save_txt(output_dir / "threshold-overall-stacking.txt", str(threshold))
+    save_txt("./data/train/score-stacking.txt", str(score))
+    save_txt("./data/train/threshold-overall-stacking.txt", str(threshold))
 
 
 if __name__ == "__main__":

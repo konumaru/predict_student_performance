@@ -7,6 +7,7 @@ import pandas as pd
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
 from rich.progress import track
+from sklearn.model_selection import GroupKFold
 
 from common import create_features, parse_labels
 from utils import timer
@@ -77,31 +78,57 @@ def main(cfg: DictConfig) -> None:
     results = labels_parsed.join(
         features, on=["session_id", "level_group"], how="left"
     )
+
+    # NOTE: Check the number of each level_group values.
+    level_group_levels = {
+        "0-4": [1, 2, 3],
+        "5-12": [4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+        "13-22": [14, 15, 16, 17, 18],
+    }
+    for level_group, levels in (
+        results.groupby("level_group")
+        .agg(pl.col("level").unique())
+        .iter_rows()
+    ):
+        assert level_group_levels[level_group] == levels
+
+    results = results.with_columns(
+        pl.col("level_group").map_dict({"0-4": 0, "5-12": 1, "13-22": 2})
+    )
     results = results.with_columns(
         pl.exclude(
             "session_id", "session_level", "correct", "level_group", "level"
         ).cast(pl.Float32),
         pl.col("level").cast(pl.Int32),
+        pl.col("level_group").cast(pl.Int32),
     )
 
     print("The Number of Features:", results.shape[1])
     print(results)
+    results.write_parquet(output_dir / "features.parquet")
 
-    for level in track(range(1, 19)):
-        results_by_level = results.filter(pl.col("level") == level)
+    print(results.groupby("level_group").agg(pl.count("level")))
 
-        cols_drop = get_cols_high_null_ratio(results_by_level)
-        cols_drop += get_cols_high_unique_ratio(
-            results_by_level.select(
-                pl.exclude("session_id", "level_group", "level", "correct")
-            )
-        )
-        save_pickle(output_dir / f"colsDrop-level_{level}.pkl", cols_drop)
-        results_by_level = results_by_level.drop(cols_drop)
+    X = results.select(
+        pl.exclude("session_id", "correct", "level_group")
+    ).to_pandas()
+    y = results.select(pl.col("correct")).to_numpy()
+    groups = results.select(pl.col("session_id")).to_numpy()
+    cv = GroupKFold(n_splits=cfg.n_splits)
+    for fold, (train_idx, valid_idx) in enumerate(
+        cv.split(X, y, groups=groups)
+    ):
+        X_train, X_valid = X.iloc[train_idx], X.iloc[valid_idx]
+        y_train, y_valid = y[train_idx], y[valid_idx]
 
-        results_by_level.write_parquet(
-            output_dir / f"features-level_{level}.parquet"
-        )
+        suffix = f"fold_{fold}"
+        X_train.to_parquet(output_dir / f"X_train_{suffix}.parquet")
+        X_valid.to_parquet(output_dir / f"X_valid_{suffix}.parquet")
+        save_pickle(output_dir / f"y_train_{suffix}.pkl", y_train)
+        save_pickle(output_dir / f"y_valid_{suffix}.pkl", y_valid)
+
+        print(f">>> fold={fold}")
+        print(f"X_train:\n{X_train.info()}")
 
 
 if __name__ == "__main__":

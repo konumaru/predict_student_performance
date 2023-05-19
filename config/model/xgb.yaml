@@ -10,6 +10,9 @@ params:
   n_estimators: 500
   early_stopping_rounds: 50
   min_child_weight: 20
-  subsample: 0.95
-  colsample_bytree: 0.8
+  subsample: 0.8
+  colsample_bytree: 0.5
   reg_alpha: 8
+  max_depth: 4
+  predictor: cpu_predictor
+  # enable_categorical: True

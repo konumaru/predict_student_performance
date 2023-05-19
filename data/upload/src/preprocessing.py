@@ -4,6 +4,7 @@ import pathlib
 import hydra
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
+from rich.progress import track
 
 from utils import timer
 from utils.io import save_pickle
@@ -37,11 +38,8 @@ def main(cfg: DictConfig) -> None:
         "room_fqid",
         "text_fqid",
     ]
-    for col in cols_cat:
-        train = train.with_columns(
-            [train[col].fill_null(f"{col}_null").alias(col)]
-        )
-        unique_vals = train.select(col).unique().to_pandas()[col].tolist()
+    for col in track(cols_cat):
+        unique_vals = train[col].drop_nulls().unique().to_list()
         save_pickle(str(output_dir / f"uniques_{col}.pkl"), unique_vals)
 
 

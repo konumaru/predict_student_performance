@@ -25,7 +25,9 @@ def predict_lgbm(
     pred = []
     for fold in range(N_FOLD):
         model = lightgbm.Booster(
-            model_file=str(model_dir / f"model-lgbm_level-{level}_fold-{fold}")
+            model_file=str(
+                model_dir / f"model_lgbm_fold_{fold}_level_{level}.txt"
+            )
         )
         _pred = model.predict(features)
         pred.append(_pred)
@@ -41,7 +43,7 @@ def predict_xgb(
     pred = []
     for fold in range(N_FOLD):
         model.load_model(
-            model_dir / f"model-xgb_level-{level}_fold-{fold}.json"
+            model_dir / f"model_xgb_fold_{fold}_level_{level}.json"
         )
         _pred = model.predict_proba(features)[:, 1]
         pred.append(_pred)
@@ -82,7 +84,6 @@ def check_test_data(
 )
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
-
     input_dir = pathlib.Path("./data/upload")
 
     threshold = float(load_txt(input_dir / "threshold-overall-stacking.txt"))
@@ -91,32 +92,47 @@ def main(cfg: DictConfig) -> None:
     iter_test = env.iter_test()
     for test, sample_submission in iter_test:
         check_test_data(test, sample_submission)
-        features = create_features(pl.from_pandas(test), str(input_dir))
-        labels = parse_labels(sample_submission)
+        features = (
+            create_features(pl.from_pandas(test), str(input_dir))
+            .select(
+                pl.exclude("session_id", "correct", "level_group").cast(
+                    pl.Float32
+                )
+            )
+            .to_numpy()
+        )
+        levels = (
+            sample_submission["session_id"]
+            .str.extract(r"q(\d+)")
+            .astype("int64")
+            .to_numpy()
+            .ravel()
+        )
 
-        for level in labels["level"].unique():
-            cols_drop = load_pickle(input_dir / f"colsDrop-level_{level}.pkl")
-            cols_drop += ["session_id", "level_group"]
-            X = features.drop(cols_drop).to_numpy()
-
-            pred_xgb = predict_xgb(X, input_dir, level)
-            pred_lgbm = predict_lgbm(X, input_dir, level)
+        for level in levels:
+            pred_xgb = predict_xgb(features, input_dir, level)
+            pred_lgbm = predict_lgbm(features, input_dir, level)
             X_pred = np.concatenate(
                 (pred_xgb.reshape(-1, 1), pred_lgbm.reshape(-1, 1)), axis=1
             )
 
-            clf = load_pickle(
-                str(input_dir / f"stack-ridge-level_{level}.pkl")
-            )
-            pred = clf.predict(X_pred)
+            clfs = load_pickle(str(input_dir / "stacking_ridge.pkl"))
+            pred = np.mean([clf.predict(X_pred) for clf in clfs], axis=0)
 
             sample_submission.loc[
-                (labels["level"] == level).to_numpy(), "correct"
+                (
+                    sample_submission["session_id"].str.contains(f"q{level}")
+                ).to_list(),
+                "correct",
             ] = (pred > threshold).astype(np.int8)
 
+        sample_submission.rename(
+            columns={"session_level": "session_id"}, inplace=True
+        )
         env.predict(sample_submission)
 
         print(sample_submission)
+        assert sample_submission.columns.tolist() == ["session_id", "correct"]
 
 
 if __name__ == "__main__":
