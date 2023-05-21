@@ -11,7 +11,6 @@ import pandas as pd
 from catboost import CatBoostClassifier
 from lightgbm import LGBMClassifier
 from omegaconf import DictConfig, OmegaConf
-from sklearn.utils.class_weight import compute_sample_weight
 from xgboost import XGBClassifier
 
 from metric import f1_score_with_threshold
@@ -21,10 +20,10 @@ from utils.io import load_pickle, save_pickle, save_txt
 
 def fit_cat(
     params,
-    X_train,
-    y_train,
-    X_valid,
-    y_valid,
+    X_train: pd.DataFrame,
+    y_train: np.ndarray,
+    X_valid: pd.DataFrame,
+    y_valid: np.ndarray,
     save_filepath: str,
     weight_train: Union[np.ndarray, None] = None,
     weight_valid: Union[np.ndarray, None] = None,
@@ -45,10 +44,10 @@ def fit_cat(
 
 def fit_lgbm(
     params,
-    X_train,
-    y_train,
-    X_valid,
-    y_valid,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_valid: np.ndarray,
+    y_valid: np.ndarray,
     save_filepath: str,
     weight_train: Union[np.ndarray, None] = None,
     weight_valid: Union[np.ndarray, None] = None,
@@ -62,7 +61,7 @@ def fit_lgbm(
         sample_weight=weight_train,
         eval_sample_weight=weight_valid,
         eval_set=[(X_train, y_train), (X_valid, y_valid)],
-        eval_metric="binary_logloss",
+        eval_metric="auc",
         callbacks=[lightgbm.log_evaluation(50), lightgbm.early_stopping(50)],
     )
     model.booster_.save_model(
@@ -73,17 +72,15 @@ def fit_lgbm(
 
 def fit_xgb(
     params,
-    X_train,
-    y_train,
-    X_valid,
-    y_valid,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_valid: np.ndarray,
+    y_valid: np.ndarray,
     save_filepath: str,
     weight_train: Union[np.ndarray, None] = None,
     weight_valid: Union[np.ndarray, None] = None,
     seed: int = 42,
 ) -> XGBClassifier:
-    weight_train = compute_sample_weight("balanced", y_train)
-
     model = XGBClassifier(**params)
     model.set_params(random_state=seed)
     model.fit(
@@ -130,11 +127,15 @@ def train(
             flag_train = level_train == level
             flag_valid = level_valid == level
 
+            cols_drop = load_pickle(
+                feature_dir / f"cols_to_drop_level_{level}.pkl"
+            )
+
             model = fit_model(
                 cfg.model.params,
-                X_train[flag_train],
+                X_train[flag_train].drop(columns=cols_drop).to_numpy(),
                 y_train[flag_train],
-                X_valid[flag_valid],
+                X_valid[flag_valid].drop(columns=cols_drop).to_numpy(),
                 y_valid[flag_valid],
                 save_filepath=os.path.join(
                     hydra.utils.get_original_cwd(),
@@ -144,7 +145,9 @@ def train(
                 ),
                 seed=cfg.seed,
             )
-            pred[flag_valid] = model.predict_proba(X_valid[flag_valid])[:, 1]
+            pred[flag_valid] = model.predict_proba(
+                X_valid[flag_valid].drop(columns=cols_drop)
+            )[:, 1]
 
         save_pickle(output_dir / f"y_pred_{suffix}.pkl", pred)
 

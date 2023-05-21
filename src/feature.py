@@ -6,7 +6,6 @@ import hydra
 import pandas as pd
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
-from rich.progress import track
 from sklearn.model_selection import GroupKFold
 
 from common import create_features, parse_labels
@@ -45,12 +44,10 @@ def get_cols_high_null_ratio(
     return null_ratio.index[(null_ratio > threshold)[0]].tolist()
 
 
-def get_cols_high_unique_ratio(
-    data: pl.DataFrame, threshold: float = 0.2
-) -> List:
+def get_cols_one_unique_value(data: pl.DataFrame) -> List:
     cols = []
     for c in data.columns:
-        if data[c].n_unique() / len(data) < threshold:
+        if data[c].n_unique() == 1:
             cols.append(c)
     return cols
 
@@ -107,7 +104,18 @@ def main(cfg: DictConfig) -> None:
     print(results)
     results.write_parquet(output_dir / "features.parquet")
 
-    print(results.groupby("level_group").agg(pl.count("level")))
+    for level in range(1, 19):
+        cols_to_drop = []
+        cols_to_drop += get_cols_one_unique_value(
+            results.filter(pl.col("level") == level)
+        )
+
+        cols_to_drop.remove("level")
+        cols_to_drop.remove("level_group")
+        save_pickle(
+            output_dir / f"cols_to_drop_level_{level}.pkl", cols_to_drop
+        )
+        print(f"Number of cols_to_drop of level={level}:", len(cols_to_drop))
 
     X = results.select(
         pl.exclude("session_id", "correct", "level_group")

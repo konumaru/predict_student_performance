@@ -2,10 +2,12 @@ import os
 import pathlib
 
 import hydra
+import pandas as pd
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
 from rich.progress import track
 
+from common import drop_multi_game_naive
 from utils import timer
 from utils.io import save_pickle
 
@@ -23,6 +25,7 @@ def main(cfg: DictConfig) -> None:
         input_dir / "train.csv",
         n_rows=(1000 if cfg.debug else None),
     )
+    train = pl.from_pandas(drop_multi_game_naive(train.to_pandas()))
     labels = pl.read_csv(input_dir / "train_labels.csv")
 
     print(train.head())

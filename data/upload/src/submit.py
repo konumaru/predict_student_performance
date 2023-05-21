@@ -9,7 +9,7 @@ import polars as pl
 from omegaconf import DictConfig, OmegaConf
 from xgboost import XGBClassifier
 
-from common import create_features, parse_labels
+from common import create_features, drop_multi_game_naive
 from data.raw import jo_wilder_310 as jo_wilder  # type: ignore
 from utils import timer
 from utils.io import load_pickle, load_txt
@@ -91,7 +91,7 @@ def main(cfg: DictConfig) -> None:
     env = jo_wilder.make_env()
     iter_test = env.iter_test()
     for test, sample_submission in iter_test:
-        check_test_data(test, sample_submission)
+        test = drop_multi_game_naive(test, local=False)
         features = (
             create_features(pl.from_pandas(test), str(input_dir))
             .select(
@@ -99,7 +99,7 @@ def main(cfg: DictConfig) -> None:
                     pl.Float32
                 )
             )
-            .to_numpy()
+            .to_pandas()
         )
         levels = (
             sample_submission["session_id"]
@@ -110,8 +110,20 @@ def main(cfg: DictConfig) -> None:
         )
 
         for level in levels:
-            pred_xgb = predict_xgb(features, input_dir, level)
-            pred_lgbm = predict_lgbm(features, input_dir, level)
+            cols_to_drop = load_pickle(
+                input_dir / f"cols_to_drop_level_{level}.pkl"
+            )
+            pred_xgb = predict_xgb(
+                features.drop(columns=cols_to_drop).to_numpy(),
+                input_dir,
+                level,
+            )
+
+            pred_lgbm = predict_lgbm(
+                features.drop(columns=cols_to_drop).to_numpy(),
+                input_dir,
+                level,
+            )
             X_pred = np.concatenate(
                 (pred_xgb.reshape(-1, 1), pred_lgbm.reshape(-1, 1)), axis=1
             )
@@ -133,6 +145,7 @@ def main(cfg: DictConfig) -> None:
 
         print(sample_submission)
         assert sample_submission.columns.tolist() == ["session_id", "correct"]
+        check_test_data(test, sample_submission)
 
 
 if __name__ == "__main__":
