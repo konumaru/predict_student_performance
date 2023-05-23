@@ -9,3 +9,4 @@ params:
   subsample: 0.8
   colsample_bytree: 0.5
   reg_alpha: 10
+  first_metric_only: true

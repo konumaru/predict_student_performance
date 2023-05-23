@@ -91,7 +91,6 @@ def main(cfg: DictConfig) -> None:
     env = jo_wilder.make_env()
     iter_test = env.iter_test()
     for test, sample_submission in iter_test:
-        test = drop_multi_game_naive(test, local=False)
         features = (
             create_features(pl.from_pandas(test), str(input_dir))
             .select(

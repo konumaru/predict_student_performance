@@ -6,7 +6,7 @@ import hydra
 import pandas as pd
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
-from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import GroupKFold, StratifiedGroupKFold
 
 from common import create_features, parse_labels
 from utils import timer
@@ -109,6 +109,9 @@ def main(cfg: DictConfig) -> None:
         cols_to_drop += get_cols_one_unique_value(
             results.filter(pl.col("level") == level)
         )
+        cols_to_drop += get_cols_high_null_ratio(
+            results.filter(pl.col("level") == level)
+        )
 
         cols_to_drop.remove("level")
         cols_to_drop.remove("level_group")
@@ -122,7 +125,10 @@ def main(cfg: DictConfig) -> None:
     ).to_pandas()
     y = results.select(pl.col("correct")).to_numpy()
     groups = results.select(pl.col("session_id")).to_numpy()
-    cv = GroupKFold(n_splits=cfg.n_splits)
+    # cv = GroupKFold(n_splits=cfg.n_splits)
+    cv = StratifiedGroupKFold(
+        n_splits=cfg.n_splits, shuffle=True, random_state=cfg.seed
+    )
     for fold, (train_idx, valid_idx) in enumerate(
         cv.split(X, y, groups=groups)
     ):

@@ -8,12 +8,9 @@ import hydra
 import lightgbm
 import numpy as np
 import pandas as pd
-import xgboost as xgb
 from catboost import CatBoostClassifier
 from lightgbm import LGBMClassifier
 from omegaconf import DictConfig, OmegaConf
-from sklearn.metrics import f1_score
-from sklearn.utils.class_weight import compute_sample_weight
 from xgboost import XGBClassifier
 
 from metric import f1_score_with_threshold

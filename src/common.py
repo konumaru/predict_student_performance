@@ -116,18 +116,16 @@ def create_features(
     uniques_dir = pathlib.Path(uniques_dirpath)
     event_name = load_pickle(str(uniques_dir / "uniques_event_name.pkl"))
     # name = load_pickle(str(uniques_dir / "uniques_name.pkl"))
-    # text = load_pickle(str(uniques_dir / "uniques_text.pkl"))
     fqid = load_pickle(str(uniques_dir / "uniques_fqid.pkl"))
     room_fqid = load_pickle(str(uniques_dir / "uniques_room_fqid.pkl"))
     text_fqid = load_pickle(str(uniques_dir / "uniques_text_fqid.pkl"))
     categorical_uniques = {
         "event_name": event_name + ["event_name_null"],
-        # "name": name + ["name_null"],
-        # "text": text + ["text_null"],
+        # "name": name + ["name_null"],  # NOTE: Not improve CV score.
         "fqid": fqid + ["fiqd_null"],
         "room_fqid": room_fqid + ["room_fqid_null"],
         "text_fqid": text_fqid,
-        # "level": list(range(1, 23)),
+        # "level": list(range(1, 23)),  # NOTE: Not improve CV score.
     }
 
     agg_features: List[Any] = []
@@ -137,6 +135,13 @@ def create_features(
     #     pl.col("index").count().alias("nrows"),
     # ]
 
+    # agg_features += [
+    #     pl.col("index")
+    #     .filter(pl.col("text").str.contains(c))
+    #     .count()
+    #     .alias(f"word_{c}")
+    #     for c in dialogs
+    # ]
     agg_features += [
         pl.col(col).drop_nulls().n_unique().alias(f"{col}_nunique")
         for col in ["event_name", "fqid", "room_fqid", "text"]
@@ -194,7 +199,6 @@ def create_features(
 
     # Numeric features.
     NUMS = [
-        # "elapsed_time",
         "elapsed_time_diff",
         # "location_x_diff",
         # "location_y_diff",
