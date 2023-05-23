@@ -57,7 +57,7 @@ def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
     input_dir = pathlib.Path("./data/upload")
 
-    threshold = float(load_txt(input_dir / "threshold-overall-stacking.txt"))
+    threshold = float(load_txt(input_dir / "threshold_overall_stacking.txt"))
     uniques_map = load_pickle(input_dir / "uniques_map.pkl")
 
     env = jo_wilder.make_env()

@@ -69,8 +69,8 @@ def main(cfg: DictConfig) -> None:
     label = np.concatenate(labels)
     score, threshold = optimize_f1_score(label, oof)
     print("f1-score of oof is:", score)
-    save_txt("./data/train/score-stacking.txt", str(score))
-    save_txt("./data/train/threshold-overall-stacking.txt", str(threshold))
+    save_txt("./data/train/score_stacking.txt", str(score))
+    save_txt("./data/train/threshold_overall_stacking.txt", str(threshold))
 
 
 if __name__ == "__main__":
