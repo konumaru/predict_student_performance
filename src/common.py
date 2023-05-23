@@ -1,21 +1,7 @@
-import pathlib
-from typing import Any, List
+from typing import Any, Dict, List
 
 import pandas as pd
 import polars as pl
-
-from utils.io import load_pickle
-
-
-def drop_null_columns(data: pl.DataFrame, columns: List) -> pl.DataFrame:
-    return data.drop(columns)
-
-
-"""
-- 特徴量は規定されたlevel_groupごとに生成する
-- labelは規定されたlevel_groupとは異なる範囲で分割する
-- 上記の異なるlevel_groupの定義を持つデータをjoinする
-"""
 
 
 def drop_multi_game_naive(
@@ -53,33 +39,22 @@ def drop_multi_game_naive(
 # ====================
 # Create features
 # ====================
-def parse_labels(labels: pd.DataFrame) -> pl.DataFrame:
-    labels.rename(columns={"session_id": "session_level"}, inplace=True)
+def parse_labels(labels: pd.DataFrame) -> pd.DataFrame:
     labels = labels.assign(
-        level=labels["session_level"].str.extract(r"q(\d+)").astype("int64"),
-        session_id=labels["session_level"]
-        .str.extract(r"(\d+)")[0]
-        .astype(int),
+        level=labels["session_id"].str.extract(r"q(\d+)").astype("int64"),
+        session=labels["session_id"].str.extract(r"(\d+)")[0].astype(int),
     )
-    labels.drop(columns=["session_level"], inplace=True)
-
-    labels_pl = pl.from_pandas(labels)
-    labels_pl = labels_pl.with_columns(
-        pl.when(pl.col("level") < 4)
-        .then("0-4")
-        .otherwise(
-            pl.when(pl.col("level") < 14).then("5-12").otherwise("13-22")
-        )
-        .alias("level_group")
-    )
-    return labels_pl
+    return labels
 
 
 def create_features(
     data: pl.DataFrame,
-    uniques_dirpath: str = "./data/preprocessing",
+    level_group: str,
+    uniqes_map: Dict[str, List[str]],
 ) -> pl.DataFrame:
-    agg_groups = ["session_id", "level_group"]
+    data = data.drop(["fullscreen", "hq", "music"])
+
+    agg_groups = ["session_id"]
     columns = [
         (
             pl.col("elapsed_time")
@@ -113,19 +88,13 @@ def create_features(
     data = data.with_columns(columns)
 
     # Categorical features.
-    uniques_dir = pathlib.Path(uniques_dirpath)
-    event_name = load_pickle(str(uniques_dir / "uniques_event_name.pkl"))
-    # name = load_pickle(str(uniques_dir / "uniques_name.pkl"))
-    fqid = load_pickle(str(uniques_dir / "uniques_fqid.pkl"))
-    room_fqid = load_pickle(str(uniques_dir / "uniques_room_fqid.pkl"))
-    text_fqid = load_pickle(str(uniques_dir / "uniques_text_fqid.pkl"))
     categorical_uniques = {
-        "event_name": event_name + ["event_name_null"],
-        # "name": name + ["name_null"],  # NOTE: Not improve CV score.
-        "fqid": fqid + ["fiqd_null"],
-        "room_fqid": room_fqid + ["room_fqid_null"],
-        "text_fqid": text_fqid,
-        # "level": list(range(1, 23)),  # NOTE: Not improve CV score.
+        "event_name": uniqes_map["event_name"] + ["event_name_null"],
+        # "name": uniqes_map["name"] + ["name_null"],  # NOTE: Not improve cv
+        "fqid": uniqes_map["fqid"] + ["fiqd_null"],
+        "room_fqid": uniqes_map["room_fqid"] + ["room_fqid_null"],
+        "text_fqid": uniqes_map["text_fqid"],
+        # "level": list(range(1, 23)),  # NOTE: Not improve cv
     }
 
     agg_features: List[Any] = []
@@ -203,7 +172,7 @@ def create_features(
         # "location_x_diff",
         # "location_y_diff",
         "hover_duration",
-        "page",
+        "page",  # NOTE: as a categorical features???
         "room_coor_x",
         "room_coor_y",
         "screen_coor_x",
@@ -246,112 +215,112 @@ def create_features(
             for c in NUMS
         ]
 
-    # NOTE: Features of level_group="5-12".
-    agg_features += [
-        pl.col("elapsed_time")
-        .filter(
-            (pl.col("text") == "Here's the log book.")
-            | (pl.col("fqid") == "logbook.page.bingo")
-        )
-        .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
-        .alias("logbook_bingo_duration"),
-        pl.col("index")
-        .filter(
-            (pl.col("text") == "Here's the log book.")
-            | (pl.col("fqid") == "logbook.page.bingo")
-        )
-        .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
-        .alias("logbook_bingo_indexCount"),
-        pl.col("elapsed_time")
-        .filter(
-            (
-                (pl.col("event_name") == "navigate_click")
-                & (pl.col("fqid") == "reader")
+    if level_group == "5-12":
+        agg_features += [
+            pl.col("elapsed_time")
+            .filter(
+                (pl.col("text") == "Here's the log book.")
+                | (pl.col("fqid") == "logbook.page.bingo")
             )
-            | (pl.col("fqid") == "reader.paper2.bingo")
-        )
-        .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
-        .alias("reader_bingo_duration"),
-        pl.col("index")
-        .filter(
-            (
-                (pl.col("event_name") == "navigate_click")
-                & (pl.col("fqid") == "reader")
+            .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
+            .alias("logbook_bingo_duration"),
+            pl.col("index")
+            .filter(
+                (pl.col("text") == "Here's the log book.")
+                | (pl.col("fqid") == "logbook.page.bingo")
             )
-            | (pl.col("fqid") == "reader.paper2.bingo")
-        )
-        .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
-        .alias("reader_bingo_indexCount"),
-        pl.col("elapsed_time")
-        .filter(
-            (
-                (pl.col("event_name") == "navigate_click")
-                & (pl.col("fqid") == "journals")
+            .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
+            .alias("logbook_bingo_indexCount"),
+            pl.col("elapsed_time")
+            .filter(
+                (
+                    (pl.col("event_name") == "navigate_click")
+                    & (pl.col("fqid") == "reader")
+                )
+                | (pl.col("fqid") == "reader.paper2.bingo")
             )
-            | (pl.col("fqid") == "journals.pic_2.bingo")
-        )
-        .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
-        .alias("journals_bingo_duration"),
-        pl.col("index")
-        .filter(
-            (
-                (pl.col("event_name") == "navigate_click")
-                & (pl.col("fqid") == "journals")
+            .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
+            .alias("reader_bingo_duration"),
+            pl.col("index")
+            .filter(
+                (
+                    (pl.col("event_name") == "navigate_click")
+                    & (pl.col("fqid") == "reader")
+                )
+                | (pl.col("fqid") == "reader.paper2.bingo")
             )
-            | (pl.col("fqid") == "journals.pic_2.bingo")
-        )
-        .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
-        .alias("journals_bingo_indexCount"),
-    ]
-    # # NOTE: Features of level_group="13-12".
-    agg_features += [
-        pl.col("elapsed_time")
-        .filter(
-            (
-                (pl.col("event_name") == "navigate_click")
-                & (pl.col("fqid") == "reader_flag")
+            .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
+            .alias("reader_bingo_indexCount"),
+            pl.col("elapsed_time")
+            .filter(
+                (
+                    (pl.col("event_name") == "navigate_click")
+                    & (pl.col("fqid") == "journals")
+                )
+                | (pl.col("fqid") == "journals.pic_2.bingo")
             )
-            | (
-                pl.col("fqid")
-                == "tunic.library.microfiche.reader_flag.paper2.bingo"
+            .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
+            .alias("journals_bingo_duration"),
+            pl.col("index")
+            .filter(
+                (
+                    (pl.col("event_name") == "navigate_click")
+                    & (pl.col("fqid") == "journals")
+                )
+                | (pl.col("fqid") == "journals.pic_2.bingo")
             )
-        )
-        .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
-        .alias("reader_flag_duration"),
-        pl.col("index")
-        .filter(
-            (
-                (pl.col("event_name") == "navigate_click")
-                & (pl.col("fqid") == "reader_flag")
+            .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
+            .alias("journals_bingo_indexCount"),
+        ]
+    if level_group == "13-22":
+        agg_features += [
+            pl.col("elapsed_time")
+            .filter(
+                (
+                    (pl.col("event_name") == "navigate_click")
+                    & (pl.col("fqid") == "reader_flag")
+                )
+                | (
+                    pl.col("fqid")
+                    == "tunic.library.microfiche.reader_flag.paper2.bingo"
+                )
             )
-            | (
-                pl.col("fqid")
-                == "tunic.library.microfiche.reader_flag.paper2.bingo"
+            .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
+            .alias("reader_flag_duration"),
+            pl.col("index")
+            .filter(
+                (
+                    (pl.col("event_name") == "navigate_click")
+                    & (pl.col("fqid") == "reader_flag")
+                )
+                | (
+                    pl.col("fqid")
+                    == "tunic.library.microfiche.reader_flag.paper2.bingo"
+                )
             )
-        )
-        .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
-        .alias("reader_flag_indexCount"),
-        pl.col("elapsed_time")
-        .filter(
-            (
-                (pl.col("event_name") == "navigate_click")
-                & (pl.col("fqid") == "journals_flag")
+            .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
+            .alias("reader_flag_indexCount"),
+            pl.col("elapsed_time")
+            .filter(
+                (
+                    (pl.col("event_name") == "navigate_click")
+                    & (pl.col("fqid") == "journals_flag")
+                )
+                | (pl.col("fqid") == "journals_flag.pic_0.bingo")
             )
-            | (pl.col("fqid") == "journals_flag.pic_0.bingo")
-        )
-        .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
-        .alias("journalsFlag_bingo_duration"),
-        pl.col("index")
-        .filter(
-            (
-                (pl.col("event_name") == "navigate_click")
-                & (pl.col("fqid") == "journals_flag")
+            .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
+            .alias("journalsFlag_bingo_duration"),
+            pl.col("index")
+            .filter(
+                (
+                    (pl.col("event_name") == "navigate_click")
+                    & (pl.col("fqid") == "journals_flag")
+                )
+                | (pl.col("fqid") == "journals_flag.pic_0.bingo")
             )
-            | (pl.col("fqid") == "journals_flag.pic_0.bingo")
-        )
-        .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
-        .alias("journalsFlag_bingo_indexCount"),
-    ]
+            .apply(lambda s: 0.0 if s.is_empty() else s.max() - s.min())  # type: ignore
+            .alias("journalsFlag_bingo_indexCount"),
+        ]
 
     results = (
         data.groupby(agg_groups, maintain_order=True)

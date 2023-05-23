@@ -6,11 +6,12 @@ import hydra
 import pandas as pd
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
-from sklearn.model_selection import GroupKFold, StratifiedGroupKFold
+from rich.progress import track
+from sklearn.model_selection import StratifiedGroupKFold
 
 from common import create_features, parse_labels
 from utils import timer
-from utils.io import save_pickle
+from utils.io import load_pickle, save_pickle
 
 
 class TrainTimeSeriesIterator:
@@ -61,88 +62,61 @@ def main(cfg: DictConfig) -> None:
     input_dir = pathlib.Path("./data/preprocessing")
     output_dir = pathlib.Path("./data/feature")
 
+    uniques_map = load_pickle(input_dir / "uniques_map.pkl")
     train = pl.read_parquet(
         input_dir / "train.parquet",
         n_rows=(10000 if cfg.debug else None),
     )
+
+    for level_group in ["0-4", "5-12", "13-22"]:
+        print(f"Create features of level_group={level_group}")
+        features = create_features(
+            train.filter(pl.col("level_group") == level_group),
+            level_group,
+            uniques_map[level_group],
+        )
+
+        cols_to_drop = []
+        cols_to_drop += get_cols_one_unique_value(features)
+        cols_to_drop += get_cols_high_null_ratio(features)
+        save_pickle(
+            output_dir / f"cols_to_drop_{level_group}.pkl", cols_to_drop
+        )
+
+        features = features.drop(cols_to_drop)
+        features_pd = (
+            features.to_pandas().set_index("session_id").astype("float32")
+        )
+        features_pd.to_parquet(output_dir / f"features_{level_group}.parquet")
+
+        print(f"Number of drop features: {len(cols_to_drop)}")
+        print(f"Number of features: {features.shape[1]}")
+        print(features.head())
+
     labels = pl.read_parquet(
         input_dir / "labels.parquet", n_rows=(10000 if cfg.debug else None)
     ).to_pandas()
+    labels = parse_labels(labels)
+    labels = labels.assign(level_group="13-22")
+    labels.loc[labels["level"] < 14, "level_group"] = "5-12"
+    labels.loc[labels["level"] < 4, "level_group"] = "0-4"
+    print(labels)
 
-    features = create_features(train, "./data/preprocessing")
-    labels_parsed = parse_labels(labels)
-
-    results = labels_parsed.join(
-        features, on=["session_id", "level_group"], how="left"
-    )
-
-    # NOTE: Check the number of each level_group values.
-    level_group_levels = {
-        "0-4": [1, 2, 3],
-        "5-12": [4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
-        "13-22": [14, 15, 16, 17, 18],
-    }
-    for level_group, levels in (
-        results.groupby("level_group")
-        .agg(pl.col("level").unique())
-        .iter_rows()
-    ):
-        assert level_group_levels[level_group] == levels
-
-    results = results.with_columns(
-        pl.col("level_group").map_dict({"0-4": 0, "5-12": 1, "13-22": 2})
-    )
-    results = results.with_columns(
-        pl.exclude(
-            "session_id", "session_level", "correct", "level_group", "level"
-        ).cast(pl.Float32),
-        pl.col("level").cast(pl.Int32),
-        pl.col("level_group").cast(pl.Int32),
-    )
-
-    print("The Number of Features:", results.shape[1])
-    print(results)
-    results.write_parquet(output_dir / "features.parquet")
-
-    for level in range(1, 19):
-        cols_to_drop = []
-        cols_to_drop += get_cols_one_unique_value(
-            results.filter(pl.col("level") == level)
-        )
-        cols_to_drop += get_cols_high_null_ratio(
-            results.filter(pl.col("level") == level)
-        )
-
-        cols_to_drop.remove("level")
-        cols_to_drop.remove("level_group")
-        save_pickle(
-            output_dir / f"cols_to_drop_level_{level}.pkl", cols_to_drop
-        )
-        print(f"Number of cols_to_drop of level={level}:", len(cols_to_drop))
-
-    X = results.select(
-        pl.exclude("session_id", "correct", "level_group")
-    ).to_pandas()
-    y = results.select(pl.col("correct")).to_numpy()
-    groups = results.select(pl.col("session_id")).to_numpy()
-    # cv = GroupKFold(n_splits=cfg.n_splits)
+    y = labels["correct"].to_numpy()
+    groups = labels["session"].to_numpy()
     cv = StratifiedGroupKFold(
         n_splits=cfg.n_splits, shuffle=True, random_state=cfg.seed
     )
-    for fold, (train_idx, valid_idx) in enumerate(
-        cv.split(X, y, groups=groups)
+    for fold, (train_idx, valid_idx) in track(
+        enumerate(cv.split(labels, y, groups=groups)), total=cv.get_n_splits()
     ):
-        X_train, X_valid = X.iloc[train_idx], X.iloc[valid_idx]
-        y_train, y_valid = y[train_idx], y[valid_idx]
-
         suffix = f"fold_{fold}"
-        X_train.to_parquet(output_dir / f"X_train_{suffix}.parquet")
-        X_valid.to_parquet(output_dir / f"X_valid_{suffix}.parquet")
-        save_pickle(output_dir / f"y_train_{suffix}.pkl", y_train)
-        save_pickle(output_dir / f"y_valid_{suffix}.pkl", y_valid)
-
-        print(f">>> fold={fold}")
-        print(f"X_train:\n{X_train.info()}")
+        labels.iloc[train_idx].to_parquet(
+            output_dir / f"y_train_{suffix}.parquet"
+        )
+        labels.iloc[valid_idx].to_parquet(
+            output_dir / f"y_valid_{suffix}.parquet"
+        )
 
 
 if __name__ == "__main__":

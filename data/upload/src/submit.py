@@ -9,7 +9,7 @@ import polars as pl
 from omegaconf import DictConfig, OmegaConf
 from xgboost import XGBClassifier
 
-from common import create_features, drop_multi_game_naive
+from common import create_features
 from data.raw import jo_wilder_310 as jo_wilder  # type: ignore
 from utils import timer
 from utils.io import load_pickle, load_txt
@@ -87,12 +87,14 @@ def main(cfg: DictConfig) -> None:
     input_dir = pathlib.Path("./data/upload")
 
     threshold = float(load_txt(input_dir / "threshold-overall-stacking.txt"))
+    uniques_map = load_pickle(input_dir / "uniques_map.pkl")
 
     env = jo_wilder.make_env()
     iter_test = env.iter_test()
     for test, sample_submission in iter_test:
+        level_group = test["level_group"].values[0]
         features = (
-            create_features(pl.from_pandas(test), str(input_dir))
+            create_features(pl.from_pandas(test), level_group, uniques_map)
             .select(
                 pl.exclude("session_id", "correct", "level_group").cast(
                     pl.Float32

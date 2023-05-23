@@ -38,9 +38,18 @@ def main(cfg: DictConfig) -> None:
         "room_fqid",
         "text_fqid",
     ]
-    for col in track(cols_cat):
-        unique_vals = train[col].drop_nulls().unique().to_list()
-        save_pickle(str(output_dir / f"uniques_{col}.pkl"), unique_vals)
+    level_groups = ["0-4", "5-12", "13-22"]
+    uniques_map = {level_group: {} for level_group in level_groups}
+    for level_group in track(level_groups, description="level_group"):
+        for col in cols_cat:
+            unique_vals = (
+                train.filter(pl.col("level_group") == level_group)[col]
+                .drop_nulls()
+                .unique()
+                .to_list()
+            )
+            uniques_map[level_group][col] = unique_vals
+    save_pickle(str(output_dir / "uniques_map.pkl"), uniques_map)
 
 
 if __name__ == "__main__":
