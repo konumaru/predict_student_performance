@@ -54,30 +54,30 @@ def create_features(
 ) -> pl.DataFrame:
     data = data.drop(["fullscreen", "hq", "music"])
 
-    agg_groups = ["session_id"]
     columns = [
         (
             pl.col("elapsed_time")
             .diff(n=1)
             .fill_null(0)
             .clip(0, 1e9)
-            .over(agg_groups)
+            .over(["session_id"])
             .alias("elapsed_time_diff")
         ),
-        (
-            pl.col("screen_coor_x")
-            .diff(n=1)
-            .abs()
-            .over(agg_groups)
-            .alias("location_x_diff")
-        ),
-        (
-            pl.col("screen_coor_y")
-            .diff(n=1)
-            .abs()
-            .over(agg_groups)
-            .alias("location_y_diff")
-        ),
+        # (
+        #     pl.col("screen_coor_x")
+        #     .diff(n=1)
+        #     .abs()
+        #     .over(agg_groups)
+        #     .alias("location_x_diff")
+        # ),
+        # (
+        #     pl.col("screen_coor_y")
+        #     .diff(n=1)
+        #     .abs()
+        #     .over(agg_groups)
+        #     .alias("location_y_diff")
+        # ),
+        pl.col("level").cast(pl.Utf8),
         pl.col("page").cast(pl.Utf8).fill_null("page_null"),
         pl.col("event_name").fill_null("event_name_null"),
         pl.col("name").fill_null("name_null"),
@@ -88,14 +88,38 @@ def create_features(
     ]
     data = data.with_columns(columns)
 
+    dialogs = [
+        "that",
+        "this",
+        "it",
+        "you",
+        "find",
+        "found",
+        "Found",
+        "notebook",
+        "Wells",
+        "wells",
+        "help",
+        "need",
+        "Oh",
+        "Ooh",
+        "Jo",
+        "flag",
+        "can",
+        "and",
+        "is",
+        "the",
+        "to",
+    ]
+
     # Categorical features.
     categorical_uniques = {
         "event_name": uniqes_map["event_name"] + ["event_name_null"],
-        # "name": uniqes_map["name"] + ["name_null"],  # NOTE: Not improve cv
+        "name": uniqes_map["name"] + ["name_null"],  # NOTE: Not improve cv
         "fqid": uniqes_map["fqid"] + ["fiqd_null"],
         "room_fqid": uniqes_map["room_fqid"] + ["room_fqid_null"],
         "text_fqid": uniqes_map["text_fqid"],
-        # "level": list(range(1, 23)),  # NOTE: Not improve cv
+        "level": uniqes_map["level"],
         "page": uniqes_map["page"] + ["page_null"],
     }
 
@@ -104,14 +128,48 @@ def create_features(
     # agg_features += [
     #     pl.col("index").count().alias("nrows"),
     # ]  # NOTE: Not improve feature
-
-    # agg_features += [
-    #     pl.col("index")
-    #     .filter(pl.col("text").str.contains(c))
-    #     .count()
-    #     .alias(f"word_{c}")
-    #     for c in dialogs
-    # ]
+    agg_features += [
+        pl.col("index")
+        .filter(pl.col("text").str.contains(c))
+        .count()
+        .alias(f"word_{c}")
+        for c in dialogs
+    ]
+    agg_features += [
+        pl.col("elapsed_time_diff")
+        .filter((pl.col("text").str.contains(c)))
+        .mean()
+        .alias(f"word_mean_{c}")
+        for c in dialogs
+    ]
+    agg_features += [
+        pl.col("elapsed_time_diff")
+        .filter((pl.col("text").str.contains(c)))
+        .std()
+        .alias(f"word_std_{c}")
+        for c in dialogs
+    ]
+    agg_features += [
+        pl.col("elapsed_time_diff")
+        .filter((pl.col("text").str.contains(c)))
+        .max()
+        .alias(f"word_max_{c}")
+        for c in dialogs
+    ]
+    agg_features += [
+        pl.col("elapsed_time_diff")
+        .filter((pl.col("text").str.contains(c)))
+        .sum()
+        .alias(f"word_sum_{c}")
+        for c in dialogs
+    ]
+    agg_features += [
+        pl.col("elapsed_time_diff")
+        .filter((pl.col("text").str.contains(c)))
+        .median()
+        .alias(f"word_median_{c}")
+        for c in dialogs
+    ]
     agg_features += [
         pl.col(col).drop_nulls().n_unique().alias(f"{col}_nunique")
         for col in ["event_name", "fqid", "room_fqid", "text"]
@@ -125,11 +183,7 @@ def create_features(
             for u in uniques
         ]
 
-        agg_cols = [
-            "elapsed_time_diff",
-            # "location_x_diff",
-            # "location_y_diff",
-        ]
+        agg_cols = ["elapsed_time_diff"]
         for agg_col in agg_cols:
             agg_features += [
                 pl.col(agg_col)
@@ -145,33 +199,31 @@ def create_features(
                 .alias(f"{col}_{u}_{agg_col}_mean")
                 for u in uniques
             ]
-        #     agg_features += [
-        #         pl.col(agg_col)
-        #         .filter(pl.col(col) == u)
-        #         .std()
-        #         .alias(f"{col}_{u}_{agg_col}_std")
-        #         for u in uniques
-        #     ]
-        #     agg_features += [
-        #         pl.col(agg_col)
-        #         .filter(pl.col(col) == u)
-        #         .max()
-        #         .alias(f"{col}_{u}_{agg_col}_max")
-        #         for u in uniques
-        #     ]
-        #     agg_features += [
-        #         pl.col(agg_col)
-        #         .filter(pl.col(col) == u)
-        #         .min()
-        #         .alias(f"{col}_{u}_{agg_col}_min")
-        #         for u in uniques
-        #     ]
+            agg_features += [
+                pl.col(agg_col)
+                .filter(pl.col(col) == u)
+                .std()
+                .alias(f"{col}_{u}_{agg_col}_std")
+                for u in uniques
+            ]
+            agg_features += [
+                pl.col(agg_col)
+                .filter(pl.col(col) == u)
+                .max()
+                .alias(f"{col}_{u}_{agg_col}_max")
+                for u in uniques
+            ]
+            agg_features += [
+                pl.col(agg_col)
+                .filter(pl.col(col) == u)
+                .min()
+                .alias(f"{col}_{u}_{agg_col}_min")
+                for u in uniques
+            ]
 
     # Numeric features.
     NUMS = [
         "elapsed_time_diff",
-        # "location_x_diff",
-        # "location_y_diff",
         "hover_duration",
         "room_coor_x",
         "room_coor_y",
@@ -190,21 +242,6 @@ def create_features(
     ]
     agg_features += [
         pl.col(c).drop_nulls().sum().alias(f"{c}_sum") for c in NUMS
-    ]
-    agg_features += [
-        pl.col(c).drop_nulls().median().alias(f"{c}_median") for c in NUMS
-    ]
-    agg_features += [
-        pl.col(c).drop_nulls().min().alias(f"{c}_min") for c in NUMS
-    ]
-    agg_features += [
-        pl.col(c).drop_nulls().max().alias(f"{c}_max") for c in NUMS
-    ]
-    agg_features += [
-        pl.col(c).drop_nulls().first().alias(f"{c}_first") for c in NUMS
-    ]
-    agg_features += [
-        pl.col(c).drop_nulls().last().alias(f"{c}_last") for c in NUMS
     ]
     for q_tile in [0.1, 0.2, 0.5, 0.75]:
         agg_features += [
@@ -275,7 +312,7 @@ def create_features(
             ]
 
     results = (
-        data.groupby(agg_groups, maintain_order=True)
+        data.groupby("session_id", maintain_order=True)
         .agg(agg_features)
         .fill_nan(-1)
     )

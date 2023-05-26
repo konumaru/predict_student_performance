@@ -18,7 +18,7 @@ N_FOLD = 5
 
 
 def predict_lgbm(
-    features: np.ndarray,
+    X: pd.DataFrame,
     model_dir: pathlib.Path,
     level: int,
 ) -> np.ndarray:
@@ -29,13 +29,13 @@ def predict_lgbm(
                 model_dir / f"model_lgbm_fold_{fold}_level_{level}.txt"
             )
         )
-        _pred = model.predict(features)
+        _pred = model.predict(X.to_numpy())
         pred.append(_pred)
     return np.mean(pred, axis=0)
 
 
 def predict_xgb(
-    features: np.ndarray,
+    X: pd.DataFrame,
     model_dir: pathlib.Path,
     level: int,
 ) -> np.ndarray:
@@ -45,7 +45,7 @@ def predict_xgb(
         model.load_model(
             model_dir / f"model_xgb_fold_{fold}_level_{level}.json"
         )
-        _pred = model.predict_proba(features)[:, 1]
+        _pred = model.predict_proba(X.to_numpy())[:, 1]
         pred.append(_pred)
     return np.mean(pred, axis=0)
 
@@ -69,17 +69,21 @@ def main(cfg: DictConfig) -> None:
         )
         X = (
             create_features(
-                pl.from_pandas(test), level_group, uniques_map[level_group]
+                pl.from_pandas(
+                    test.sort_values(by="index").reset_index(drop=True)
+                ),
+                level_group,
+                uniques_map[level_group],
             )
-            .drop(cols_to_drop)
+            .drop(cols_to_drop + ["session_id"])
             .to_pandas()
-            .set_index("session_id")
             .astype("float32")
-            .to_numpy()
         )
+        X["correct_avg"] = np.nan
         sample_submission = parse_labels(sample_submission)
 
-        for level in sample_submission["level"].unique():
+        total_pred = 0.0
+        for i, level in enumerate(sample_submission["level"].unique()):
             pred_xgb = predict_xgb(X, input_dir, level)
             pred_lgbm = predict_lgbm(X, input_dir, level)
             X_pred = np.concatenate(
@@ -88,11 +92,15 @@ def main(cfg: DictConfig) -> None:
 
             clfs = load_pickle(str(input_dir / "stacking_ridge.pkl"))
             pred = np.mean([clf.predict(X_pred) for clf in clfs], axis=0)
+            pred_binary = (pred > threshold).astype(np.int8)
 
             sample_submission.loc[
                 sample_submission["session_id"].str.contains(f"q{level}"),
                 "correct",
-            ] = (pred > threshold).astype(np.int8)
+            ] = pred_binary
+
+            total_pred += pred_binary
+            X["correct_avg"] += total_pred / (i + 1)
 
         env.predict(sample_submission[["session_id", "correct"]])
 

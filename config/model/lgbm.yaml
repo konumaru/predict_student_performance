@@ -2,7 +2,7 @@ name: lgbm
 
 params:
   boosting_type: gbdt
-  learning_rate: 0.05
+  learning_rate: 0.02
   n_estimators: 500
   objective: binary
   min_child_weight: 20

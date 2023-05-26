@@ -4,7 +4,6 @@ import subprocess
 import hydra
 import lightgbm
 import numpy as np
-import pandas as pd
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
 from xgboost import XGBClassifier
@@ -69,13 +68,15 @@ def main(cfg: DictConfig) -> None:
         )
         X = (
             create_features(
-                pl.from_pandas(test), level_group, uniques_map[level_group]
+                pl.from_pandas(
+                    test.sort_values(by="index").reset_index(drop=True)
+                ),
+                level_group,
+                uniques_map[level_group],
             )
-            .drop(cols_to_drop)
-            .to_pandas()
-            .set_index("session_id")
-            .astype("float32")
+            .drop(cols_to_drop + ["session_id"])
             .to_numpy()
+            .astype("float32")
         )
         sample_submission = parse_labels(sample_submission)
 
@@ -87,7 +88,10 @@ def main(cfg: DictConfig) -> None:
             )
 
             clfs = load_pickle(str(input_dir / "stacking_ridge.pkl"))
-            pred = np.mean([clf.predict(X_pred) for clf in clfs], axis=0)
+            # pred = np.mean([clf.predict(X_pred) for clf in clfs], axis=0)
+            pred = np.mean(
+                [clf.predict_proba(X_pred)[:, 1] for clf in clfs], axis=0
+            )
 
             sample_submission.loc[
                 sample_submission["session_id"].str.contains(f"q{level}"),

@@ -12,12 +12,15 @@ from utils import timer
 from utils.io import load_pickle, save_pickle, save_txt
 
 
-def load_oof(folds: List[int]) -> Tuple[np.ndarray, np.ndarray]:
+def load_folds_data(
+    folds: List[int],
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     input_dir = pathlib.Path("./data/train/")
     feature_dir = pathlib.Path("./data/feature/")
     oofs_xgb = []
     oofs_lgbm = []
     labels = []
+    levels = []
     for fold in folds:
         oofs_xgb.append(load_pickle(input_dir / f"y_pred_xgb_fold_{fold}.pkl"))
         oofs_lgbm.append(
@@ -25,6 +28,7 @@ def load_oof(folds: List[int]) -> Tuple[np.ndarray, np.ndarray]:
         )
         y_valid = pd.read_parquet(feature_dir / f"y_valid_fold_{fold}.parquet")
         labels.append(y_valid["correct"].to_numpy())
+        levels.append(y_valid["level"].to_numpy())
     oof = np.concatenate(
         [
             np.concatenate(oofs_xgb).reshape(-1, 1),
@@ -33,7 +37,8 @@ def load_oof(folds: List[int]) -> Tuple[np.ndarray, np.ndarray]:
         axis=1,
     )
     label = np.concatenate(labels)
-    return oof, label
+    level = np.concatenate(levels)
+    return oof, label, level
 
 
 @hydra.main(
@@ -48,12 +53,12 @@ def main(cfg: DictConfig) -> None:
     oofs = []
     clfs = []
     for fold in range(cfg.n_splits):
-        X_train, y_train = load_oof(
+        X_train, y_train, levels_train = load_folds_data(
             [i for i in range(cfg.n_splits) if i != fold]
         )
-        X_valid, y_valid = load_oof([fold])
+        X_valid, y_valid, levels_valid = load_folds_data([fold])
 
-        clf = Ridge(alpha=1.0)
+        clf = Ridge(alpha=1.0, random_state=cfg.seed)
         clf.fit(X_train, y_train)
         clfs.append(clf)
 

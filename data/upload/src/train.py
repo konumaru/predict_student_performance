@@ -127,6 +127,25 @@ def train(
                 X_train = X.loc[_y_train["session"]]
                 X_valid = X.loc[_y_valid["session"]]
 
+                # Test ============
+                correct_avg_train = (
+                    y_train.query("level < @level")
+                    .groupby("session")["correct"]
+                    .mean()
+                )
+                correct_avg_valid = (
+                    y_valid.query("level < @level")
+                    .groupby("session")["correct"]
+                    .mean()
+                )
+                X_train.loc[
+                    correct_avg_train.index, "correct_avg"
+                ] = correct_avg_train.to_numpy()
+                X_valid.loc[
+                    correct_avg_valid.index, "correct_avg"
+                ] = correct_avg_valid.to_numpy()
+                # =================
+
                 model = fit_model(
                     cfg.model.params,
                     X_train.to_numpy(),

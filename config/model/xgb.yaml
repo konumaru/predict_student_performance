@@ -7,7 +7,7 @@ params:
   objective: binary:logistic
   eval_metric: auc
   learning_rate: 0.02
-  n_estimators: 500
+  n_estimators: 1000
   max_depth: 4
   early_stopping_rounds: 50
   subsample: 0.8

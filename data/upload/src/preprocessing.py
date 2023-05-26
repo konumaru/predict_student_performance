@@ -23,7 +23,8 @@ def main(cfg: DictConfig) -> None:
         input_dir / "train.csv",
         n_rows=(1000 if cfg.debug else None),
     )
-    train = train.with_columns(pl.col("page").cast(pl.Utf8).alias("page"))
+    train = train.with_columns(pl.col("page").cast(pl.Utf8))
+    train = train.with_columns(pl.col("level").cast(pl.Utf8))
     labels = pl.read_csv(input_dir / "train_labels.csv")
 
     print(train.head())
@@ -39,6 +40,7 @@ def main(cfg: DictConfig) -> None:
         "room_fqid",
         "text_fqid",
         "page",
+        "level",
     ]
     level_groups = ["0-4", "5-12", "13-22"]
     uniques_map = {level_group: {} for level_group in level_groups}
