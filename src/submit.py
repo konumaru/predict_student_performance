@@ -4,7 +4,6 @@ import subprocess
 import hydra
 import lightgbm
 import numpy as np
-import pandas as pd
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
 from xgboost import XGBClassifier
@@ -18,7 +17,7 @@ N_FOLD = 5
 
 
 def predict_lgbm(
-    X: pd.DataFrame,
+    X: np.ndarray,
     model_dir: pathlib.Path,
     level: int,
 ) -> np.ndarray:
@@ -29,13 +28,13 @@ def predict_lgbm(
                 model_dir / f"model_lgbm_fold_{fold}_level_{level}.txt"
             )
         )
-        _pred = model.predict(X.to_numpy())
+        _pred = model.predict(X)
         pred.append(_pred)
     return np.mean(pred, axis=0)
 
 
 def predict_xgb(
-    X: pd.DataFrame,
+    X: np.ndarray,
     model_dir: pathlib.Path,
     level: int,
 ) -> np.ndarray:
@@ -45,7 +44,7 @@ def predict_xgb(
         model.load_model(
             model_dir / f"model_xgb_fold_{fold}_level_{level}.json"
         )
-        _pred = model.predict_proba(X.to_numpy())[:, 1]
+        _pred = model.predict_proba(X)[:, 1]
         pred.append(_pred)
     return np.mean(pred, axis=0)
 
@@ -58,7 +57,7 @@ def main(cfg: DictConfig) -> None:
     input_dir = pathlib.Path("./data/upload")
 
     threshold = float(load_txt(input_dir / "threshold_overall_stacking.txt"))
-    uniques_map = load_pickle(input_dir / "uniques_map.pkl")
+    # thresholds = load_pickle(input_dir / "threshold_levels.pkl")
 
     env = jo_wilder.make_env()
     iter_test = env.iter_test()
@@ -73,17 +72,15 @@ def main(cfg: DictConfig) -> None:
                     test.sort_values(by="index").reset_index(drop=True)
                 ),
                 level_group,
-                uniques_map[level_group],
+                input_dir,
             )
             .drop(cols_to_drop + ["session_id"])
-            .to_pandas()
+            .to_numpy()
             .astype("float32")
         )
-        X["correct_avg"] = np.nan
         sample_submission = parse_labels(sample_submission)
 
-        total_pred = 0.0
-        for i, level in enumerate(sample_submission["level"].unique()):
+        for level in sample_submission["level"].unique():
             pred_xgb = predict_xgb(X, input_dir, level)
             pred_lgbm = predict_lgbm(X, input_dir, level)
             X_pred = np.concatenate(
@@ -92,15 +89,11 @@ def main(cfg: DictConfig) -> None:
 
             clfs = load_pickle(str(input_dir / "stacking_ridge.pkl"))
             pred = np.mean([clf.predict(X_pred) for clf in clfs], axis=0)
-            pred_binary = (pred > threshold).astype(np.int8)
 
             sample_submission.loc[
                 sample_submission["session_id"].str.contains(f"q{level}"),
                 "correct",
-            ] = pred_binary
-
-            total_pred += pred_binary
-            X["correct_avg"] += total_pred / (i + 1)
+            ] = (pred >= threshold).astype(np.int8)
 
         env.predict(sample_submission[["session_id", "correct"]])
 

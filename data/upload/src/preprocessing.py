@@ -3,11 +3,30 @@ import pathlib
 
 import hydra
 import polars as pl
+from gensim.models import Word2Vec
 from omegaconf import DictConfig, OmegaConf
 from rich.progress import track
 
 from utils import timer
 from utils.io import save_pickle
+
+
+def train_w2v(
+    data: pl.DataFrame,
+    col: str,
+    output_dir: pathlib.Path,
+    embedded_dim: int = 8,
+) -> None:
+    sentences = data.groupby("session_id").agg(pl.col(col))[col].to_list()
+    model = Word2Vec(
+        sentences=sentences,
+        vector_size=embedded_dim,
+        min_count=1,
+        workers=4,
+        seed=42,
+        epochs=10,
+    )
+    model.wv.save(str(output_dir / f"wv_{col}.wv"))
 
 
 @hydra.main(
@@ -54,6 +73,8 @@ def main(cfg: DictConfig) -> None:
             )
             uniques_map[level_group][col] = unique_vals
     save_pickle(str(output_dir / "uniques_map.pkl"), uniques_map)
+
+    train_w2v(train, "text", output_dir)
 
 
 if __name__ == "__main__":

@@ -62,7 +62,6 @@ def main(cfg: DictConfig) -> None:
     input_dir = pathlib.Path("./data/preprocessing")
     output_dir = pathlib.Path("./data/feature")
 
-    uniques_map = load_pickle(input_dir / "uniques_map.pkl")
     train = pl.read_parquet(
         input_dir / "train.parquet",
         n_rows=(10000 if cfg.debug else None),
@@ -73,12 +72,15 @@ def main(cfg: DictConfig) -> None:
         features = create_features(
             train.filter(pl.col("level_group") == level_group),
             level_group,
-            uniques_map[level_group],
+            input_dir,
         )
 
         cols_to_drop = []
         cols_to_drop += get_cols_one_unique_value(features)
         cols_to_drop += get_cols_high_null_ratio(features)
+        cols_to_drop += load_pickle(
+            output_dir / f"drop_features_{level_group}.pkl"
+        )
         save_pickle(
             output_dir / f"cols_to_drop_{level_group}.pkl", cols_to_drop
         )

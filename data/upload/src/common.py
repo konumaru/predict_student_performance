@@ -1,7 +1,11 @@
-from typing import Any, Dict, List
+import pathlib
+from typing import Any, List
 
 import pandas as pd
 import polars as pl
+from gensim.models import KeyedVectors
+
+from utils.io import load_pickle
 
 
 def drop_multi_game_naive(
@@ -50,9 +54,11 @@ def parse_labels(labels: pd.DataFrame) -> pd.DataFrame:
 def create_features(
     data: pl.DataFrame,
     level_group: str,
-    uniqes_map: Dict[str, List[str]],
+    input_dir: pathlib.Path,
 ) -> pl.DataFrame:
     data = data.drop(["fullscreen", "hq", "music"])
+    uniques_map = load_pickle(input_dir / "uniques_map.pkl")[level_group]
+    wv_text = KeyedVectors.load(str(input_dir / "wv_text.wv"), mmap="r")
 
     columns = [
         (
@@ -114,13 +120,13 @@ def create_features(
 
     # Categorical features.
     categorical_uniques = {
-        "event_name": uniqes_map["event_name"] + ["event_name_null"],
-        "name": uniqes_map["name"] + ["name_null"],  # NOTE: Not improve cv
-        "fqid": uniqes_map["fqid"] + ["fiqd_null"],
-        "room_fqid": uniqes_map["room_fqid"] + ["room_fqid_null"],
-        "text_fqid": uniqes_map["text_fqid"],
-        "level": uniqes_map["level"],
-        "page": uniqes_map["page"] + ["page_null"],
+        "event_name": uniques_map["event_name"] + ["event_name_null"],
+        "name": uniques_map["name"] + ["name_null"],  # NOTE: Not improve cv
+        "fqid": uniques_map["fqid"] + ["fiqd_null"],
+        "room_fqid": uniques_map["room_fqid"] + ["room_fqid_null"],
+        "text_fqid": uniques_map["text_fqid"],
+        "level": uniques_map["level"],
+        "page": uniques_map["page"] + ["page_null"],
     }
 
     agg_features: List[Any] = []
@@ -221,6 +227,16 @@ def create_features(
                 for u in uniques
             ]
 
+            # if col == "level":
+            #     agg_features += [
+            #         pl.col(agg_col)
+            #         .filter(pl.col(col) == u)
+            #         .tail(100)
+            #         .mean()
+            #         .alias(f"{col}_{u}_{agg_col}_tail10_mean")
+            #         for u in uniques
+            #     ]
+
     # Numeric features.
     NUMS = [
         "elapsed_time_diff",
@@ -316,4 +332,29 @@ def create_features(
         .agg(agg_features)
         .fill_nan(-1)
     )
+
+    def empty_to_list(s: List) -> List:
+        return s if s else []
+
+    # num_tail = 50
+    # weights = [float(i / num_tail) for i in range(1, num_tail + 1)]
+    # text_embeddings = (
+    #     data.groupby("session_id", maintain_order=True)
+    #     .agg(
+    #         pl.col("text")
+    #         .tail(num_tail)
+    #         .apply(
+    #             lambda x: wv_text.get_mean_vector(
+    #                 empty_to_list(x.to_list()), weights
+    #             )
+    #         )
+    #         .alias("embedding")
+    #     )["embedding"]
+    #     .to_list()
+    # )
+    # text_embeddings = pl.DataFrame(
+    #     text_embeddings,
+    #     schema=[f"text_embedding_{i}" for i in range(wv_text.vector_size)],
+    # )
+    # results = pl.concat([agged_features, text_embeddings], how="horizontal")
     return results

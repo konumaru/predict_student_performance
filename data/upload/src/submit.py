@@ -17,7 +17,7 @@ N_FOLD = 5
 
 
 def predict_lgbm(
-    features: np.ndarray,
+    X: np.ndarray,
     model_dir: pathlib.Path,
     level: int,
 ) -> np.ndarray:
@@ -28,13 +28,13 @@ def predict_lgbm(
                 model_dir / f"model_lgbm_fold_{fold}_level_{level}.txt"
             )
         )
-        _pred = model.predict(features)
+        _pred = model.predict(X)
         pred.append(_pred)
     return np.mean(pred, axis=0)
 
 
 def predict_xgb(
-    features: np.ndarray,
+    X: np.ndarray,
     model_dir: pathlib.Path,
     level: int,
 ) -> np.ndarray:
@@ -44,7 +44,7 @@ def predict_xgb(
         model.load_model(
             model_dir / f"model_xgb_fold_{fold}_level_{level}.json"
         )
-        _pred = model.predict_proba(features)[:, 1]
+        _pred = model.predict_proba(X)[:, 1]
         pred.append(_pred)
     return np.mean(pred, axis=0)
 
@@ -57,7 +57,7 @@ def main(cfg: DictConfig) -> None:
     input_dir = pathlib.Path("./data/upload")
 
     threshold = float(load_txt(input_dir / "threshold_overall_stacking.txt"))
-    uniques_map = load_pickle(input_dir / "uniques_map.pkl")
+    # thresholds = load_pickle(input_dir / "threshold_levels.pkl")
 
     env = jo_wilder.make_env()
     iter_test = env.iter_test()
@@ -72,7 +72,7 @@ def main(cfg: DictConfig) -> None:
                     test.sort_values(by="index").reset_index(drop=True)
                 ),
                 level_group,
-                uniques_map[level_group],
+                input_dir,
             )
             .drop(cols_to_drop + ["session_id"])
             .to_numpy()
@@ -88,15 +88,12 @@ def main(cfg: DictConfig) -> None:
             )
 
             clfs = load_pickle(str(input_dir / "stacking_ridge.pkl"))
-            # pred = np.mean([clf.predict(X_pred) for clf in clfs], axis=0)
-            pred = np.mean(
-                [clf.predict_proba(X_pred)[:, 1] for clf in clfs], axis=0
-            )
+            pred = np.mean([clf.predict(X_pred) for clf in clfs], axis=0)
 
             sample_submission.loc[
                 sample_submission["session_id"].str.contains(f"q{level}"),
                 "correct",
-            ] = (pred > threshold).astype(np.int8)
+            ] = (pred >= threshold).astype(np.int8)
 
         env.predict(sample_submission[["session_id", "correct"]])
 

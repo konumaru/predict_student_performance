@@ -137,6 +137,7 @@ data/.hydra/
 *.npy
 *.parquet
 *.json
+*.wv
 data/models/*
 data/models/model-*
 data/upload/model-*

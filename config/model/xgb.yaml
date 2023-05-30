@@ -12,6 +12,7 @@ params:
   early_stopping_rounds: 50
   subsample: 0.8
   colsample_bytree: 0.5
-  reg_alpha: 8
+  reg_alpha: 10
+  reg_lambda: 10
   # predictor: cpu_predictor
   # enable_categorical: True

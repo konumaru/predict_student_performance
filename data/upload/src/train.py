@@ -99,8 +99,12 @@ def train(
 ) -> None:
     for fold in range(cfg.n_splits):
         print(f">>>> Train fold={fold}")
-        y_train = pd.read_parquet(feature_dir / f"y_train_fold_{fold}.parquet")
-        y_valid = pd.read_parquet(feature_dir / f"y_valid_fold_{fold}.parquet")
+        y_train = pd.read_parquet(
+            feature_dir / f"y_train_fold_{fold}.parquet"
+        ).reset_index(drop=True)
+        y_valid = pd.read_parquet(
+            feature_dir / f"y_valid_fold_{fold}.parquet"
+        ).reset_index(drop=True)
 
         if cfg.model.name == "xgb":
             fit_model = fit_xgb
@@ -127,30 +131,13 @@ def train(
                 X_train = X.loc[_y_train["session"]]
                 X_valid = X.loc[_y_valid["session"]]
 
-                # Test ============
-                correct_avg_train = (
-                    y_train.query("level < @level")
-                    .groupby("session")["correct"]
-                    .mean()
-                )
-                correct_avg_valid = (
-                    y_valid.query("level < @level")
-                    .groupby("session")["correct"]
-                    .mean()
-                )
-                X_train.loc[
-                    correct_avg_train.index, "correct_avg"
-                ] = correct_avg_train.to_numpy()
-                X_valid.loc[
-                    correct_avg_valid.index, "correct_avg"
-                ] = correct_avg_valid.to_numpy()
-                # =================
-
                 model = fit_model(
                     cfg.model.params,
-                    X_train.to_numpy(),
+                    # X_train.to_numpy(),
+                    X_train,
                     _y_train["correct"].to_numpy(),
-                    X_valid.to_numpy(),
+                    # X_valid.to_numpy(),
+                    X_valid,
                     _y_valid["correct"].to_numpy(),
                     save_filepath=os.path.join(
                         hydra.utils.get_original_cwd(),
@@ -160,9 +147,10 @@ def train(
                     ),
                     seed=cfg.seed,
                 )
-                pred[y_valid["level"] == level] = model.predict_proba(X_valid)[
-                    :, 1
-                ]
+                pred[y_valid["level"] == level] = model.predict_proba(
+                    X_valid.to_numpy()
+                )[:, 1]
+
         save_pickle(output_dir / f"y_pred_{suffix}.pkl", pred)
 
 
