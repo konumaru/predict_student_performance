@@ -58,7 +58,6 @@ def create_features(
 ) -> pl.DataFrame:
     data = data.drop(["fullscreen", "hq", "music"])
     uniques_map = load_pickle(input_dir / "uniques_map.pkl")[level_group]
-    wv_text = KeyedVectors.load(str(input_dir / "wv_text.wv"), mmap="r")
 
     columns = [
         (
@@ -333,9 +332,10 @@ def create_features(
         .fill_nan(-1)
     )
 
-    def empty_to_list(s: List) -> List:
-        return s if s else []
+    # def empty_to_list(s: List) -> List:
+    #     return s if s else []
 
+    # wv_text = KeyedVectors.load(str(input_dir / "wv_text.wv"), mmap="r")
     # num_tail = 50
     # weights = [float(i / num_tail) for i in range(1, num_tail + 1)]
     # text_embeddings = (
@@ -357,4 +357,25 @@ def create_features(
     #     schema=[f"text_embedding_{i}" for i in range(wv_text.vector_size)],
     # )
     # results = pl.concat([agged_features, text_embeddings], how="horizontal")
+
     return results
+
+
+def pad_sequence(seq: List, max_seq_len: int, pad_value: Any) -> List:
+    if len(seq) >= max_seq_len:
+        return seq[-max_seq_len:]
+    else:
+        return [pad_value] * (max_seq_len - len(seq)) + seq
+
+
+def create_sequence_features(
+    X: pd.DataFrame, y: pd.DataFrame, max_seq_len: int
+) -> pd.DataFrame:
+    features = X.groupby("session_id")[
+        ["elapsed_time_diff", "event_name", "level", "fqid", "room_fqid"]
+    ].agg(lambda x: pad_sequence(list(x), max_seq_len, 0))
+    labels = y.groupby("session")["correct"].apply(list)
+    data = pd.merge(
+        labels, features, how="left", left_index=True, right_index=True
+    )
+    return data

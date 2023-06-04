@@ -1,0 +1,18 @@
+name: nn
+
+continuous_dim: 1
+event_name_embedding_dim: 15
+level_embedding_dim: 8
+fqid_embedding_dim: 32
+room_fqid_embedding_dim: 8
+conv_hidden_dim: 256
+conv_output_dim: 128
+output_dim: 3
+learning_rate: 5e-2
+
+max_epochs: 100
+log_every_n_steps: 10
+check_val_every_n_epoch: 1
+
+max_seq_len: 512
+batch_size: 256

@@ -133,11 +133,9 @@ def train(
 
                 model = fit_model(
                     cfg.model.params,
-                    # X_train.to_numpy(),
-                    X_train,
+                    X_train.to_numpy(),
                     _y_train["correct"].to_numpy(),
-                    # X_valid.to_numpy(),
-                    X_valid,
+                    X_valid.to_numpy(),
                     _y_valid["correct"].to_numpy(),
                     save_filepath=os.path.join(
                         hydra.utils.get_original_cwd(),
