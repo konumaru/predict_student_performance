@@ -1,10 +1,10 @@
 name: cat
 
 params:
-  loss_function: F1
+  loss_function: Logloss
   iterations: 500
   learning_rate: 0.05
   use_best_model: True
-  min_data_in_leaf: 20
+  max_depth: 5
   task_type: GPU
-  devices: 0
+  verbose: 50

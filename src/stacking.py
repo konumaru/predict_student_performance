@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 from sklearn.linear_model import Ridge
-from sklearn.metrics import f1_score
 
 from metric import optimize_f1_score
 from utils import timer
@@ -28,9 +27,11 @@ def load_folds_data(
         oofs_lgbm.append(
             load_pickle(input_dir / f"y_pred_lgbm_fold_{fold}.pkl")
         )
+
         y_valid = pd.read_parquet(feature_dir / f"y_valid_fold_{fold}.parquet")
         labels.append(y_valid["correct"].to_numpy())
         levels.append(y_valid["level"].to_numpy())
+
     oof = np.concatenate(
         [
             np.concatenate(oofs_xgb).reshape(-1, 1),
@@ -69,7 +70,7 @@ def main(cfg: DictConfig) -> None:
         oofs.append(pred)
         labels.append(y_valid)
         levels.append(levels_valid)
-        print("Weights of [xgb, lgbm]: ", clf.coef_)
+        print("Weights of [xgb, lgbm, cat]: ", clf.coef_)
 
     save_pickle(str(output_dir / "stacking_ridge.pkl"), clfs)
 
@@ -78,27 +79,32 @@ def main(cfg: DictConfig) -> None:
     label = np.concatenate(labels)
     levels = np.concatenate(levels)
 
-    oof_bin = np.zeros(len(oof))
-    threshold_levels = defaultdict(float)
-    for level in range(1, 19):
-        score, threshold = optimize_f1_score(
-            label[levels == level], oof[levels == level]
-        )
-        threshold_levels[level] = threshold
-        oof_bin[levels == level] = (oof[levels == level] >= threshold).astype(
-            np.int8
-        )
-        print(
-            f"f1-score of q{level}:",
-            round(score, 6),
-            "threshold:",
-            round(threshold, 4),
-        )
-    print("f1-score of overall:", f1_score(label, oof_bin, average="macro"))
-    save_pickle("./data/train/threshold_levels.pkl", threshold_levels)
+    # oof_bin = np.zeros(len(oof))
+    # threshold_levels = defaultdict(float)
+    # for level in range(1, 19):
+    #     score, threshold = optimize_f1_score(
+    #         label[levels == level], oof[levels == level]
+    #     )
+    #     threshold_levels[level] = threshold
+    #     oof_bin[levels == level] = (
+    #         oof[levels == level] >= threshold
+    #     ).astype(np.int8)
+    #     print(
+    #         f"f1-score of q{level}:",
+    #         round(score, 6),
+    #         "threshold:",
+    #         round(threshold, 4),
+    #     )
+    # print("f1-score of overall:", f1_score(label, oof_bin, average="macro"))
+    # save_pickle("./data/train/threshold_levels.pkl", threshold_levels)
 
     score, threshold = optimize_f1_score(label, oof)
-    print("\nf1-score of oof is:", score)
+    print(
+        "\nf1-score of oof is:",
+        score,
+        "threshold:",
+        round(threshold, 4),
+    )
     save_txt("./data/train/score_stacking.txt", str(score))
     save_txt("./data/train/threshold_overall_stacking.txt", str(threshold))
 
