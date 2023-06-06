@@ -125,6 +125,9 @@ def train(
             )
             for level in range(*levels):
                 print(f"fitting model of level={level}")
+                params = cfg.model.params["default"]
+                # params.update(cfg.model.params[f"level-{level}"])
+
                 _y_train = y_train.query("level == @level")
                 _y_valid = y_valid.query("level == @level")
 
@@ -132,7 +135,7 @@ def train(
                 X_valid = X.loc[_y_valid["session"]]
 
                 model = fit_model(
-                    cfg.model.params,
+                    params,
                     X_train.to_numpy(),
                     _y_train["correct"].to_numpy(),
                     X_valid.to_numpy(),

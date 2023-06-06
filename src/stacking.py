@@ -57,7 +57,7 @@ def main(cfg: DictConfig) -> None:
     clfs = []
     levels = []
     for fold in range(cfg.n_splits):
-        X_train, y_train, levels_train = load_folds_data(
+        X_train, y_train, _ = load_folds_data(
             [i for i in range(cfg.n_splits) if i != fold]
         )
         X_valid, y_valid, levels_valid = load_folds_data([fold])

@@ -141,5 +141,6 @@ data/.hydra/
 data/models/*
 data/models/model-*
 data/upload/model-*
+data/upload/src/*
 multirun/*
 catboost_info/*

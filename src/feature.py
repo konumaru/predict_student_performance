@@ -67,6 +67,14 @@ def main(cfg: DictConfig) -> None:
         n_rows=(10000 if cfg.debug else None),
     )
 
+    labels = pl.read_parquet(
+        input_dir / "labels.parquet", n_rows=(10000 if cfg.debug else None)
+    ).to_pandas()
+    labels = parse_labels(labels)
+    labels = labels.assign(level_group="13-22")
+    labels.loc[labels["level"] < 14, "level_group"] = "5-12"
+    labels.loc[labels["level"] < 4, "level_group"] = "0-4"
+
     for level_group in ["0-4", "5-12", "13-22"]:
         print(f"Create features of level_group={level_group}")
         features = create_features(
@@ -95,14 +103,9 @@ def main(cfg: DictConfig) -> None:
         print(f"Number of features: {features.shape[1]}")
         print(features.head())
 
-    labels = pl.read_parquet(
-        input_dir / "labels.parquet", n_rows=(10000 if cfg.debug else None)
-    ).to_pandas()
-    labels = parse_labels(labels)
-    labels = labels.assign(level_group="13-22")
-    labels.loc[labels["level"] < 14, "level_group"] = "5-12"
-    labels.loc[labels["level"] < 4, "level_group"] = "0-4"
-    print(labels)
+        labels.query("level_group==@level_group").to_parquet(
+            output_dir / f"labels_{level_group}.parquet"
+        )
 
     y = labels["correct"].to_numpy()
     groups = labels["session"].to_numpy()

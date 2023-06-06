@@ -1,18 +1,271 @@
 name: xgb
 
 params:
-  booster: gbtree
-  gpu_id: 0
-  tree_method: gpu_hist
-  objective: binary:logistic
-  eval_metric: auc
-  learning_rate: 0.03
-  n_estimators: 1000
-  max_depth: 4
-  early_stopping_rounds: 50
-  subsample: 0.8
-  colsample_bytree: 0.5
-  reg_alpha: 10
-  reg_lambda: 10
-  # predictor: cpu_predictor
-  # enable_categorical: True
+  default:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    learning_rate: 0.02
+    n_estimators: 1000
+    max_depth: 4
+    early_stopping_rounds: 50
+    subsample: 0.8
+    colsample_bytree: 0.5
+    alpha: 10
+    lambda: 10
+    # predictor: cpu_predictor
+    # enable_categorical: True
+
+  level-1:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 0.8085802707053835
+    colsample_bytree: 0.225115043966883
+    lambda: 3.25995317579048
+    learning_rate: 0.021697518090781864
+    max_depth: 6
+    n_estimators: 456
+    subsample: 0.7184593125044315
+
+  level-2:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 0.11128705390120218
+    colsample_bytree: 0.20826892471104372
+    lambda: 10.050960093908277
+    learning_rate: 0.026259949170489516
+    max_depth: 3
+    n_estimators: 409
+    subsample: 0.7404144604122944
+
+  level-3:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 1.9101478516044135
+    colsample_bytree: 0.36299583718678996
+    lambda: 0.4248750887289173
+    learning_rate: 0.0277962935682567
+    max_depth: 5
+    n_estimators: 361
+    subsample: 0.780332250089628
+
+  level-4:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 0.021644857152708835
+    colsample_bytree: 0.2762452243023692
+    lambda: 16.79034359673598
+    learning_rate: 0.021460715094586587
+    max_depth: 6
+    n_estimators: 303
+    subsample: 0.6573752551008935
+
+  level-5:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 1.2997549402370168
+    colsample_bytree: 0.4235204693804397
+    lambda: 12.021903294704535
+    learning_rate: 0.020788233493154267
+    max_depth: 5
+    n_estimators: 603
+    subsample: 0.5228668997162842
+
+  level-6:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 10.873762059570014
+    colsample_bytree: 0.36373360355456036
+    lambda: 0.03236206529137213
+    learning_rate: 0.023160348431088208
+    max_depth: 4
+    n_estimators: 574
+    subsample: 0.5449259312173407
+
+  level-7:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 9.518166227308956
+    colsample_bytree: 0.5434343783234983
+    lambda: 15.905364490654408
+    learning_rate: 0.02255965563958515
+    max_depth: 4
+    n_estimators: 567
+    subsample: 0.7185173798843537
+
+  level-8:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 0.9243472200341611
+    colsample_bytree: 0.38729712632333085
+    lambda: 16.210387186120744
+    learning_rate: 0.024236848369071532
+    max_depth: 3
+    n_estimators: 342
+    subsample: 0.5448599511524381
+
+  level-9:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 0.013693809765674275
+    colsample_bytree: 0.2182919961846147
+    lambda: 14.5441884167113
+    learning_rate: 0.03649267324737551
+    max_depth: 4
+    n_estimators: 346
+    subsample: 0.780718853848432
+
+  level-10:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 1.4874940286977507
+    colsample_bytree: 0.32374026391359667
+    lambda: 1.3206527558031387
+    learning_rate: 0.027365056876566388
+    max_depth: 3
+    n_estimators: 461
+    subsample: 0.47905136471591275
+
+  level-11:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 0.12156864327549857
+    colsample_bytree: 0.23477804438110222
+    lambda: 13.722313355100145
+    learning_rate: 0.024069334829613345
+    max_depth: 3
+    n_estimators: 598
+    subsample: 0.7297702314048681
+
+  level-12:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 19.800442959271766
+    colsample_bytree: 0.35975975812600114
+    lambda: 0.047430129001458814
+    learning_rate: 0.022293919126507866
+    max_depth: 5
+    n_estimators: 301
+    subsample: 0.674027232366351
+
+  level-13:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 5.993489130623113
+    colsample_bytree: 0.38292994267077834
+    lambda: 0.3825777733432281
+    learning_rate: 0.021497447203449975
+    max_depth: 5
+    n_estimators: 427
+    subsample: 0.7675617268319559
+
+  level-14:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 0.6286379615088504
+    colsample_bytree: 0.437819752805538
+    lambda: 4.294376066820166
+    learning_rate: 0.022420538218955042
+    max_depth: 4
+    n_estimators: 609
+    subsample: 0.7651804883570392
+
+  level-15:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 0.19693551350830554
+    colsample_bytree: 0.3457212595947772
+    lambda: 11.751441048625129
+    learning_rate: 0.022216737974198316
+    max_depth: 3
+    n_estimators: 564
+    subsample: 0.5444773084582435
+
+  level-16:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 0.42003650805386916
+    colsample_bytree: 0.5070154806527786
+    lambda: 0.9205693178258856
+    learning_rate: 0.02096267158269049
+    max_depth: 3
+    n_estimators: 373
+    subsample: 0.6123155427326998
+
+  level-17:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 1.0950709494017332
+    colsample_bytree: 0.42569748210874714
+    lambda: 0.21783325922928767
+    learning_rate: 0.030905995970937187
+    max_depth: 3
+    n_estimators: 250
+    subsample: 0.770725575919481
+
+  level-18:
+    booster: gbtree
+    gpu_id: 0
+    tree_method: gpu_hist
+    objective: binary:logistic
+    eval_metric: auc
+    alpha: 11.87688270298109
+    colsample_bytree: 0.26293590971016473
+    lambda: 5.008358458596116
+    learning_rate: 0.02960269635076049
+    max_depth: 3
+    n_estimators: 445
+    subsample: 0.6560571854991979
