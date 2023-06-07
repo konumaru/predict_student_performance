@@ -120,9 +120,8 @@ def train(
 
         levelGroup_levels = {"0-4": (1, 4), "5-12": (4, 14), "13-22": (14, 19)}
         for level_group, levels in levelGroup_levels.items():
-            X = pd.read_parquet(
-                feature_dir / f"features_{level_group}.parquet"
-            )
+            X = pd.read_pickle(feature_dir / f"features_{level_group}.pkl")
+
             for level in range(*levels):
                 print(f"fitting model of level={level}")
                 params = cfg.model.params["default"]

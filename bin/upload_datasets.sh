@@ -6,8 +6,8 @@ rm ./data/upload/*.pkl
 rm ./data/upload/*.txt
 
 cp ./data/preprocessing/uniques_map.pkl ./data/upload/
-cp ./data/preprocessing/wv_*.wv ./data/upload/
-cp ./data/feature/cols_to_drop_*.pkl ./data/upload/
+# cp ./data/preprocessing/wv_*.wv ./data/upload/
+cp ./data/feature/cols_*.pkl ./data/upload/
 cp ./data/train/*.txt ./data/upload/
 cp ./data/train/threshold_levels.pkl ./data/upload/
 cp ./data/models/* ./data/upload/

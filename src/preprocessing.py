@@ -74,7 +74,13 @@ def main(cfg: DictConfig) -> None:
             uniques_map[level_group][col] = unique_vals
     save_pickle(str(output_dir / "uniques_map.pkl"), uniques_map)
 
-    train_w2v(train, "text", output_dir)
+    unique_all_map = {}
+    for col in cols_cat:
+        unique_vals = train[col].drop_nulls().unique().to_list()
+        unique_all_map[col] = unique_vals
+    save_pickle(str(output_dir / "unique_all_map.pkl"), unique_all_map)
+
+    # train_w2v(train, "text", output_dir)
 
 
 if __name__ == "__main__":

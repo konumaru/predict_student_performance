@@ -1,8 +1,10 @@
 import os
 import pathlib
-from typing import List, Tuple
+from collections import defaultdict
+from typing import List
 
 import hydra
+import numpy as np
 import pandas as pd
 import polars as pl
 from omegaconf import DictConfig, OmegaConf
@@ -15,27 +17,28 @@ from utils.io import load_pickle, save_pickle
 
 
 class TrainTimeSeriesIterator:
-    def __init__(self, train: pl.DataFrame, labels: pl.DataFrame) -> None:
-        self.train = train
-        self.labels = labels
-        self.groups = ["0-4", "5-12", "13-22"]
+    def __init__(self, train: pd.DataFrame) -> None:
+        self.train = train.sort_values(["session_id", "elapsed_time"])
+
+        session_ids = self.train["session_id"].unique()
+        level_group = ["0-4", "5-12", "13-22"]
+        self.items = [(s, lg) for lg in level_group for s in session_ids]
+
+    def __len__(self):
+        return len(self.items)
 
     def __iter__(self):
         return self
 
-    def __next__(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        if len(self.groups) == 0:
+    def __next__(self) -> pd.DataFrame:
+        if len(self.items) == 0:
             raise StopIteration()
 
-        group = self.groups.pop(0)
-        group_min, group_max = (int(s) for s in group.split("-"))
-        batch_train = self.train.filter(pl.col("level_group") == group)
-
-        regex = "|".join([f"_q{i}" for i in range(group_min, group_max + 1)])
-        batch_labels = self.labels.filter(
-            pl.col("session_id").str.contains(regex)
+        session_id, level_group = self.items.pop(0)
+        train_iter = self.train.query(
+            f"session_id == {session_id} & level_group == '{level_group}'"
         )
-        return batch_train.to_pandas(), batch_labels.to_pandas()
+        return train_iter
 
 
 def get_cols_high_null_ratio(
@@ -66,7 +69,9 @@ def main(cfg: DictConfig) -> None:
         input_dir / "train.parquet",
         n_rows=(10000 if cfg.debug else None),
     )
+    level_groups = ["0-4", "5-12", "13-22"]
 
+    # NOTE: Create labels.
     labels = pl.read_parquet(
         input_dir / "labels.parquet", n_rows=(10000 if cfg.debug else None)
     ).to_pandas()
@@ -75,38 +80,10 @@ def main(cfg: DictConfig) -> None:
     labels.loc[labels["level"] < 14, "level_group"] = "5-12"
     labels.loc[labels["level"] < 4, "level_group"] = "0-4"
 
-    for level_group in ["0-4", "5-12", "13-22"]:
-        print(f"Create features of level_group={level_group}")
-        features = create_features(
-            train.filter(pl.col("level_group") == level_group),
-            level_group,
-            input_dir,
-        )
-
-        cols_to_drop = []
-        cols_to_drop += get_cols_one_unique_value(features)
-        cols_to_drop += get_cols_high_null_ratio(features)
-        cols_to_drop += load_pickle(
-            output_dir / f"drop_features_{level_group}.pkl"
-        )
-        save_pickle(
-            output_dir / f"cols_to_drop_{level_group}.pkl", cols_to_drop
-        )
-
-        features = features.drop(cols_to_drop)
-        features_pd = (
-            features.to_pandas().set_index("session_id").astype("float32")
-        )
-        features_pd.to_parquet(output_dir / f"features_{level_group}.parquet")
-
-        print(f"Number of drop features: {len(cols_to_drop)}")
-        print(f"Number of features: {features.shape[1]}")
-        print(features.head())
-
+    for level_group in level_groups:
         labels.query("level_group==@level_group").to_parquet(
             output_dir / f"labels_{level_group}.parquet"
         )
-
     y = labels["correct"].to_numpy()
     groups = labels["session"].to_numpy()
     cv = StratifiedGroupKFold(
@@ -122,6 +99,66 @@ def main(cfg: DictConfig) -> None:
         labels.iloc[valid_idx].to_parquet(
             output_dir / f"y_valid_{suffix}.parquet"
         )
+
+    # NOTE: Create features.
+    levelGroup_features = {lg: defaultdict(list) for lg in level_groups}
+    for level_group in level_groups:
+        print(f"Create features of level_group={level_group}")
+        features_pl = create_features(
+            train.filter(pl.col("level_group") == level_group),
+            level_group,
+            input_dir,
+        )
+
+        cols_to_drop = []
+        cols_to_drop += get_cols_one_unique_value(features_pl)
+        cols_to_drop += get_cols_high_null_ratio(features_pl)
+        cols_to_drop += load_pickle(
+            output_dir / f"drop_features_{level_group}.pkl"
+        )
+        save_pickle(
+            output_dir / f"cols_to_drop_{level_group}.pkl", cols_to_drop
+        )
+
+        session_ids = features_pl["session_id"].to_list()
+        features_np = (
+            features_pl.drop(cols_to_drop)
+            .select(pl.exclude("session_id"))
+            .to_numpy()
+            .astype("float32")
+        )
+        assert len(features_np) == len(session_ids)
+
+        for i, sess in enumerate(session_ids):
+            levelGroup_features[level_group][sess] = features_np[i].tolist()
+
+            if level_group == "5-12":
+                levelGroup_features[level_group][sess] = sum(
+                    (
+                        levelGroup_features["0-4"][sess],
+                        features_np[i].tolist(),
+                    ),
+                    [],
+                )
+            elif level_group == "13-22":
+                levelGroup_features[level_group][sess] = sum(
+                    (
+                        levelGroup_features["0-4"][sess],
+                        levelGroup_features["5-12"][sess],
+                        features_np[i].tolist(),
+                    ),
+                    [],
+                )
+
+        features_pd = pd.DataFrame.from_dict(
+            levelGroup_features[level_group]
+        ).T
+
+        features_pd.to_pickle(output_dir / f"features_{level_group}.pkl")
+
+        print(f"Number of drop features: {len(cols_to_drop)}")
+        print(f"Shape of features: {features_pd.shape}")
+        print(features_pd.head())
 
 
 if __name__ == "__main__":
