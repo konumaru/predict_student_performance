@@ -54,23 +54,29 @@ def main(cfg: DictConfig) -> None:
 
     labels = []
     oofs = []
-    clfs = []
+    clfs = defaultdict(list)
     levels = []
     for fold in range(cfg.n_splits):
-        X_train, y_train, _ = load_folds_data(
+        X_train, y_train, levels_train = load_folds_data(
             [i for i in range(cfg.n_splits) if i != fold]
         )
         X_valid, y_valid, levels_valid = load_folds_data([fold])
 
-        clf = Ridge(alpha=1.0, random_state=cfg.seed)
-        clf.fit(X_train, y_train)
-        clfs.append(clf)
+        pred = np.zeros(len(y_valid))
+        for level in range(1, 19):
+            clf = Ridge(alpha=1.0, random_state=cfg.seed)
+            clf.fit(
+                X_train[levels_train == level], y_train[levels_train == level]
+            )
+            clfs[level].append(clf)
 
-        pred = clf.predict(X_valid)
+            pred[levels_valid == level] = clf.predict(
+                X_valid[levels_valid == level]
+            )
+
         oofs.append(pred)
         labels.append(y_valid)
         levels.append(levels_valid)
-        print("Weights of [xgb, lgbm, cat]: ", clf.coef_)
 
     save_pickle(str(output_dir / "stacking_ridge.pkl"), clfs)
 
@@ -78,25 +84,6 @@ def main(cfg: DictConfig) -> None:
     oof = np.concatenate(oofs)
     label = np.concatenate(labels)
     levels = np.concatenate(levels)
-
-    # oof_bin = np.zeros(len(oof))
-    # threshold_levels = defaultdict(float)
-    # for level in range(1, 19):
-    #     score, threshold = optimize_f1_score(
-    #         label[levels == level], oof[levels == level]
-    #     )
-    #     threshold_levels[level] = threshold
-    #     oof_bin[levels == level] = (
-    #         oof[levels == level] >= threshold
-    #     ).astype(np.int8)
-    #     print(
-    #         f"f1-score of q{level}:",
-    #         round(score, 6),
-    #         "threshold:",
-    #         round(threshold, 4),
-    #     )
-    # print("f1-score of overall:", f1_score(label, oof_bin, average="macro"))
-    # save_pickle("./data/train/threshold_levels.pkl", threshold_levels)
 
     score, threshold = optimize_f1_score(label, oof)
     print(

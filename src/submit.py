@@ -1,11 +1,9 @@
 import pathlib
 import subprocess
 
-import hydra
 import lightgbm
 import numpy as np
 import polars as pl
-from omegaconf import DictConfig, OmegaConf
 from xgboost import XGBClassifier
 
 from common import create_features, parse_labels
@@ -49,15 +47,11 @@ def predict_xgb(
     return np.mean(pred, axis=0)
 
 
-@hydra.main(
-    config_path="../config", config_name="config.yaml", version_base="1.3"
-)
-def main(cfg: DictConfig) -> None:
-    print(OmegaConf.to_yaml(cfg))
+def main() -> None:
     input_dir = pathlib.Path("./data/upload")
 
     threshold = float(load_txt(input_dir / "threshold_overall_stacking.txt"))
-    # thresholds = load_pickle(input_dir / "threshold_levels.pkl")
+    ignore_levels = [2, 18]
 
     env = jo_wilder.make_env()
     iter_test = env.iter_test()
@@ -81,19 +75,25 @@ def main(cfg: DictConfig) -> None:
         sample_submission = parse_labels(sample_submission)
 
         for level in sample_submission["level"].unique():
-            pred_xgb = predict_xgb(X, input_dir, level)
-            pred_lgbm = predict_lgbm(X, input_dir, level)
-            X_pred = np.concatenate(
-                (pred_xgb.reshape(-1, 1), pred_lgbm.reshape(-1, 1)), axis=1
-            )
+            if level in ignore_levels:
+                pred = 1
+            else:
+                pred_xgb = predict_xgb(X, input_dir, level)
+                pred_lgbm = predict_lgbm(X, input_dir, level)
+                X_pred = np.concatenate(
+                    (pred_xgb.reshape(-1, 1), pred_lgbm.reshape(-1, 1)), axis=1
+                )
 
-            clfs = load_pickle(str(input_dir / "stacking_ridge.pkl"))
-            pred = np.mean([clf.predict(X_pred) for clf in clfs], axis=0)
+                clfs = load_pickle(str(input_dir / "stacking_ridge.pkl"))
+                pred = np.mean(
+                    [clf.predict(X_pred) for clf in clfs[level]], axis=0
+                )
+                pred = (pred >= threshold).astype(np.int8)
 
             sample_submission.loc[
                 sample_submission["session_id"].str.contains(f"q{level}"),
                 "correct",
-            ] = (pred >= threshold).astype(np.int8)
+            ] = pred
 
         env.predict(sample_submission[["session_id", "correct"]])
 

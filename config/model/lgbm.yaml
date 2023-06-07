@@ -1,12 +1,67 @@
 name: lgbm
 
 params:
-  boosting_type: gbdt
-  learning_rate: 0.05
-  n_estimators: 500
-  objective: binary
-  min_child_weight: 20
-  subsample: 0.8
-  colsample_bytree: 0.5
-  reg_alpha: 10
-  first_metric_only: true
+  default:
+    boosting_type: gbdt
+    learning_rate: 0.05
+    n_estimators: 500
+    objective: binary
+    min_child_weight: 20
+    subsample: 0.8
+    colsample_bytree: 0.5
+    reg_alpha: 10
+    first_metric_only: true
+
+  level-1:
+    boosting_type: gbdt
+
+  level-2:
+    boosting_type: gbdt
+
+  level-3:
+    boosting_type: gbdt
+
+  level-4:
+    boosting_type: gbdt
+
+  level-5:
+    boosting_type: gbdt
+
+  level-6:
+    boosting_type: gbdt
+
+  level-7:
+    boosting_type: gbdt
+
+  level-8:
+    boosting_type: gbdt
+
+  level-9:
+    boosting_type: gbdt
+
+  level-10:
+    boosting_type: gbdt
+
+  level-11:
+    boosting_type: gbdt
+
+  level-12:
+    boosting_type: gbdt
+
+  level-13:
+    boosting_type: gbdt
+
+  level-14:
+    boosting_type: gbdt
+
+  level-15:
+    boosting_type: gbdt
+
+  level-16:
+    boosting_type: gbdt
+
+  level-17:
+    boosting_type: gbdt
+
+  level-18:
+    boosting_type: gbdt
