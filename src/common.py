@@ -3,7 +3,6 @@ from typing import Any, List
 
 import pandas as pd
 import polars as pl
-from gensim.models import KeyedVectors
 
 from utils.io import load_pickle
 
@@ -188,7 +187,10 @@ def create_features(
             for u in uniques
         ]
 
-        agg_cols = ["elapsed_time_diff"]
+        agg_cols = [
+            "elapsed_time_diff",
+            "hover_duration",
+        ]
         for agg_col in agg_cols:
             agg_features += [
                 pl.col(agg_col)
@@ -225,16 +227,6 @@ def create_features(
                 .alias(f"{col}_{u}_{agg_col}_min")
                 for u in uniques
             ]
-
-            # if col == "level":
-            #     agg_features += [
-            #         pl.col(agg_col)
-            #         .filter(pl.col(col) == u)
-            #         .tail(100)
-            #         .mean()
-            #         .alias(f"{col}_{u}_{agg_col}_tail10_mean")
-            #         for u in uniques
-            #     ]
 
     # Numeric features.
     NUMS = [
@@ -331,32 +323,6 @@ def create_features(
         .agg(agg_features)
         .fill_nan(-1)
     )
-
-    # def empty_to_list(s: List) -> List:
-    #     return s if s else []
-
-    # wv_text = KeyedVectors.load(str(input_dir / "wv_text.wv"), mmap="r")
-    # num_tail = 50
-    # weights = [float(i / num_tail) for i in range(1, num_tail + 1)]
-    # text_embeddings = (
-    #     data.groupby("session_id", maintain_order=True)
-    #     .agg(
-    #         pl.col("text")
-    #         .tail(num_tail)
-    #         .apply(
-    #             lambda x: wv_text.get_mean_vector(
-    #                 empty_to_list(x.to_list()), weights
-    #             )
-    #         )
-    #         .alias("embedding")
-    #     )["embedding"]
-    #     .to_list()
-    # )
-    # text_embeddings = pl.DataFrame(
-    #     text_embeddings,
-    #     schema=[f"text_embedding_{i}" for i in range(wv_text.vector_size)],
-    # )
-    # results = pl.concat([agged_features, text_embeddings], how="horizontal")
 
     return results
 

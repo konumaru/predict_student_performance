@@ -1,6 +1,5 @@
 import os
 import pathlib
-from collections import defaultdict
 from typing import Union
 
 import hydra
@@ -125,7 +124,7 @@ def train(
             for level in range(*levels):
                 print(f"fitting model of level={level}")
                 params = cfg.model.params["default"]
-                params.update(cfg.model.params[f"level-{level}"])
+                # params.update(cfg.model.params[f"level-{level}"])
 
                 _y_train = y_train.query("level == @level")
                 _y_valid = y_valid.query("level == @level")

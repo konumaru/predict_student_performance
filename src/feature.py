@@ -113,12 +113,16 @@ def main(cfg: DictConfig) -> None:
         cols_to_drop = []
         cols_to_drop += get_cols_one_unique_value(features_pl)
         cols_to_drop += get_cols_high_null_ratio(features_pl)
-        cols_to_drop += load_pickle(
-            output_dir / f"drop_features_{level_group}.pkl"
-        )
+        # cols_to_drop += load_pickle(
+        #     output_dir / f"cols_low_fi_{level_group}.pkl"
+        # )
         save_pickle(
             output_dir / f"cols_to_drop_{level_group}.pkl", cols_to_drop
         )
+
+        # cols = list(features_pl.drop(cols_to_drop).columns)[1:]
+        # cols = [f"{c}_{level_group}" for c in cols]
+        # save_pickle(output_dir / f"cols_{level_group}.pkl", cols)
 
         session_ids = features_pl["session_id"].to_list()
         features_np = (
@@ -143,7 +147,6 @@ def main(cfg: DictConfig) -> None:
             elif level_group == "13-22":
                 levelGroup_features[level_group][sess] = sum(
                     (
-                        levelGroup_features["0-4"][sess],
                         levelGroup_features["5-12"][sess],
                         features_np[i].tolist(),
                     ),
