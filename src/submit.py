@@ -1,6 +1,7 @@
 import pathlib
 import subprocess
 from collections import defaultdict
+from typing import Any, Dict, List, Union
 
 import lightgbm
 import numpy as np
@@ -16,7 +17,7 @@ N_FOLD = 5
 
 
 def predict_lgbm(
-    X: np.ndarray,
+    X: Union[List, np.ndarray],
     model_dir: pathlib.Path,
     level: int,
 ) -> np.ndarray:
@@ -33,7 +34,7 @@ def predict_lgbm(
 
 
 def predict_xgb(
-    X: np.ndarray,
+    X: Union[List, np.ndarray],
     model_dir: pathlib.Path,
     level: int,
 ) -> np.ndarray:
@@ -48,13 +49,19 @@ def predict_xgb(
     return np.mean(pred, axis=0)
 
 
+# TODO: モデルのロードを予測の前に行うことで高速化
+
+
 def main() -> None:
     input_dir = pathlib.Path("./data/upload")
 
     threshold = float(load_txt(input_dir / "threshold_overall_stacking.txt"))
+    clfs = load_pickle(str(input_dir / "stacking_ridge.pkl"))
     level_groups = ["0-4", "5-12", "13-22"]
 
-    levelGroup_features = {lg: defaultdict(list) for lg in level_groups}
+    levelGroup_features: Dict[str, List[Any]] = {
+        lg: defaultdict(list) for lg in level_groups
+    }
     cols_to_drop = {}
     for level_group in level_groups:
         cols_to_drop[level_group] = load_pickle(
@@ -108,16 +115,14 @@ def main() -> None:
                 (pred_xgb.reshape(-1, 1), pred_lgbm.reshape(-1, 1)), axis=1
             )
 
-            clfs = load_pickle(str(input_dir / "stacking_ridge.pkl"))
             pred = np.mean(
                 [clf.predict(X_pred) for clf in clfs[level]], axis=0
             )
-            pred = (pred >= threshold).astype(np.int8)
 
             sample_submission.loc[
                 sample_submission["session_id"].str.contains(f"q{level}"),
                 "correct",
-            ] = pred
+            ] = (pred >= threshold).astype(np.int8)
 
         env.predict(sample_submission[["session_id", "correct"]])
 

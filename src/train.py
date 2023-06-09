@@ -173,23 +173,6 @@ def evaluate(
     labels = np.concatenate(labels)
     levels = np.concatenate(levels)
 
-    # threshold_levels = defaultdict(float)
-    # for level in range(1, 19):
-    #     score, threshold = optimize_f1_score(
-    #         labels[levels == level], oof[levels == level]
-    #     )
-    #     threshold_levels[level] = threshold
-    #     print(
-    #         f"f1-score of q{level}:",
-    #         round(score, 6),
-    #         "threshold:",
-    #         round(threshold, 4),
-    #     )
-
-    # save_pickle(
-    #     output_dir / f"threshold_{cfg.model.name}.pkl", threshold_levels
-    # )
-    # Evaluate oof.
     score, threshold = optimize_f1_score(labels, oof)
     print("f1-score of oof is:", score, "threshold:", threshold)
     save_txt(output_dir / f"score_{cfg.model.name}.txt", str(score))

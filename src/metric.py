@@ -1,4 +1,5 @@
-from typing import Tuple
+from collections import defaultdict
+from typing import Dict, Tuple
 
 import numpy as np
 from sklearn.metrics import f1_score
@@ -22,3 +23,19 @@ def optimize_f1_score(y_true, y_pred) -> Tuple[float, float]:
     best_score = np.max(f1_scores)
     best_threshold = thresholds[np.argmax(f1_scores)]
     return best_score, best_threshold
+
+
+def optimize_f1_score_each_levels(labels, oof, levels) -> Dict[int, float]:
+    threshold_levels = defaultdict(float)
+    for level in range(1, 19):
+        score, threshold = optimize_f1_score(
+            labels[levels == level], oof[levels == level]
+        )
+        threshold_levels[level] = threshold
+        print(
+            f"f1-score of q{level}:",
+            round(score, 6),
+            "threshold:",
+            round(threshold, 4),
+        )
+    return threshold_levels

@@ -119,7 +119,7 @@ def create_features(
     # Categorical features.
     categorical_uniques = {
         "event_name": uniques_map["event_name"] + ["event_name_null"],
-        "name": uniques_map["name"] + ["name_null"],  # NOTE: Not improve cv
+        "name": uniques_map["name"] + ["name_null"],
         "fqid": uniques_map["fqid"] + ["fiqd_null"],
         "room_fqid": uniques_map["room_fqid"] + ["room_fqid_null"],
         "text_fqid": uniques_map["text_fqid"],
@@ -250,6 +250,7 @@ def create_features(
     agg_features += [
         pl.col(c).drop_nulls().sum().alias(f"{c}_sum") for c in NUMS
     ]
+    # ============================
     for q_tile in [0.1, 0.2, 0.5, 0.75]:
         agg_features += [
             pl.col(c).quantile(q_tile, "nearest").alias(f"{c}_qtile_{q_tile}")
