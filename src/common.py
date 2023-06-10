@@ -67,20 +67,20 @@ def create_features(
             .over(["session_id"])
             .alias("elapsed_time_diff")
         ),
-        # (
-        #     pl.col("screen_coor_x")
-        #     .diff(n=1)
-        #     .abs()
-        #     .over(agg_groups)
-        #     .alias("location_x_diff")
-        # ),
-        # (
-        #     pl.col("screen_coor_y")
-        #     .diff(n=1)
-        #     .abs()
-        #     .over(agg_groups)
-        #     .alias("location_y_diff")
-        # ),
+        (
+            pl.col("screen_coor_x")
+            .diff(n=1)
+            .abs()
+            .over(["session_id"])
+            .alias("location_x_diff")
+        ),
+        (
+            pl.col("screen_coor_y")
+            .diff(n=1)
+            .abs()
+            .over("session_id")
+            .alias("location_y_diff")
+        ),
         pl.col("level").cast(pl.Utf8),
         pl.col("page").cast(pl.Utf8).fill_null("page_null"),
         pl.col("event_name").fill_null("event_name_null"),
@@ -236,15 +236,17 @@ def create_features(
         "room_coor_y",
         "screen_coor_x",
         "screen_coor_y",
+        # TESTING===================
+        "location_x_diff",
+        "location_y_diff",
+        # ==========================
     ]
 
+    def minmax_func(s) -> float:
+        return 0.0 if s.is_empty() else s.max() - s.min()
+
     agg_features += [
-        pl.col("elapsed_time")
-        .drop_nulls()
-        .sum()
-        .alias(
-            "elapsed_time_sum"
-        )  # これは本当にいるのか？, sum(diff)はわかるはこれは何を意味してるのかわからない
+        pl.col("elapsed_time").drop_nulls().sum().alias("elapsed_time_sum")
     ]
     agg_features += [
         pl.col(c).drop_nulls().mean().alias(f"{c}_mean") for c in NUMS
@@ -261,9 +263,6 @@ def create_features(
             pl.col(c).quantile(q_tile, "nearest").alias(f"{c}_qtile_{q_tile}")
             for c in NUMS
         ]
-
-    def minmax_func(s) -> float:
-        return 0.0 if s.is_empty() else s.max() - s.min()
 
     if level_group == "5-12":
         for col in ["elapsed_time", "index"]:
