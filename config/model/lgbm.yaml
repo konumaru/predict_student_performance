@@ -1,4 +1,5 @@
 name: lgbm
+is_balanced: False
 
 params:
   default:

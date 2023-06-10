@@ -1,6 +1,5 @@
 import os
 import pathlib
-from typing import Union
 
 import hydra
 import lightgbm
@@ -9,6 +8,7 @@ import pandas as pd
 from catboost import CatBoostClassifier
 from lightgbm import LGBMClassifier
 from omegaconf import DictConfig, OmegaConf
+from sklearn.utils.class_weight import compute_sample_weight
 from xgboost import XGBClassifier
 
 from metric import optimize_f1_score
@@ -23,10 +23,12 @@ def fit_cat(
     X_valid: np.ndarray,
     y_valid: np.ndarray,
     save_filepath: str,
-    weight_train: Union[np.ndarray, None] = None,
-    weight_valid: Union[np.ndarray, None] = None,
     seed: int = 42,
+    is_balanced: bool = False,
 ) -> CatBoostClassifier:
+    if is_balanced:
+        weight_train = compute_sample_weight("balanced", y_train)
+
     model = CatBoostClassifier(**params)
     model.set_params(random_state=seed)
     model.fit(
@@ -47,17 +49,18 @@ def fit_lgbm(
     X_valid: np.ndarray,
     y_valid: np.ndarray,
     save_filepath: str,
-    weight_train: Union[np.ndarray, None] = None,
-    weight_valid: Union[np.ndarray, None] = None,
     seed: int = 42,
+    is_balanced: bool = False,
 ) -> LGBMClassifier:
+    if is_balanced:
+        weight_train = compute_sample_weight("balanced", y_train)
+
     model = LGBMClassifier(**params)
     model.set_params(random_state=seed)
     model.fit(
         X_train,
         y_train,
         sample_weight=weight_train,
-        eval_sample_weight=weight_valid,
         eval_set=[(X_train, y_train), (X_valid, y_valid)],
         eval_metric="auc",
         callbacks=[lightgbm.log_evaluation(50), lightgbm.early_stopping(50)],
@@ -75,17 +78,18 @@ def fit_xgb(
     X_valid: np.ndarray,
     y_valid: np.ndarray,
     save_filepath: str,
-    weight_train: Union[np.ndarray, None] = None,
-    weight_valid: Union[np.ndarray, None] = None,
     seed: int = 42,
+    is_balanced: bool = False,
 ) -> XGBClassifier:
+    if is_balanced:
+        weight_train = compute_sample_weight("balanced", y_train)
+
     model = XGBClassifier(**params)
     model.set_params(random_state=seed)
     model.fit(
         X_train,
         y_train,
         sample_weight=weight_train,
-        sample_weight_eval_set=weight_valid,
         eval_set=[(X_train, y_train), (X_valid, y_valid)],
         verbose=50,
     )
@@ -145,6 +149,7 @@ def train(
                         f"model_{suffix}_level_{level}",
                     ),
                     seed=cfg.seed,
+                    is_balanced=cfg.model.is_balanced,
                 )
                 pred[y_valid["level"] == level] = model.predict_proba(
                     X_valid.to_numpy()
