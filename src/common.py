@@ -129,9 +129,9 @@ def create_features(
 
     agg_features: List[Any] = []
 
-    # agg_features += [
-    #     pl.col("index").count().alias("nrows"),
-    # ]  # NOTE: Not improve feature
+    agg_features += [
+        pl.col("index").count().alias("nrows"),
+    ]
     agg_features += [
         pl.col("index")
         .filter(pl.col("text").str.contains(c))
