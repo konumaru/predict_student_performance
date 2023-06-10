@@ -239,7 +239,12 @@ def create_features(
     ]
 
     agg_features += [
-        pl.col("elapsed_time").drop_nulls().sum().alias("elapsed_time_sum")
+        pl.col("elapsed_time")
+        .drop_nulls()
+        .sum()
+        .alias(
+            "elapsed_time_sum"
+        )  # これは本当にいるのか？, sum(diff)はわかるはこれは何を意味してるのかわからない
     ]
     agg_features += [
         pl.col(c).drop_nulls().mean().alias(f"{c}_mean") for c in NUMS

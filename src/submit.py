@@ -1,7 +1,7 @@
 import pathlib
 import subprocess
 from collections import defaultdict
-from typing import Any, Dict, List, Union
+from typing import Dict, List, Tuple, Union
 
 import lightgbm
 import numpy as np
@@ -18,55 +18,56 @@ N_FOLD = 5
 
 def predict_lgbm(
     X: Union[List, np.ndarray],
-    model_dir: pathlib.Path,
-    level: int,
+    models: List[lightgbm.Booster],
 ) -> np.ndarray:
-    pred = []
-    for fold in range(N_FOLD):
-        model = lightgbm.Booster(
-            model_file=str(
-                model_dir / f"model_lgbm_fold_{fold}_level_{level}.txt"
-            )
-        )
-        _pred = model.predict(X)
-        pred.append(_pred)
+    pred = [model.predict(X) for model in models]
     return np.mean(pred, axis=0)
 
 
 def predict_xgb(
     X: Union[List, np.ndarray],
-    model_dir: pathlib.Path,
-    level: int,
+    models: List[XGBClassifier],
 ) -> np.ndarray:
-    model = XGBClassifier()
-    pred = []
-    for fold in range(N_FOLD):
-        model.load_model(
-            model_dir / f"model_xgb_fold_{fold}_level_{level}.json"
-        )
-        _pred = model.predict_proba(X)[:, 1]
-        pred.append(_pred)
+    pred = [model.predict_proba(X)[:, 1] for model in models]
     return np.mean(pred, axis=0)
 
 
-# TODO: モデルのロードを予測の前に行うことで高速化
+def load_model(input_dir: pathlib.Path) -> Tuple[Dict, Dict]:
+    xgb_models = defaultdict(list)
+    lgbm_models = defaultdict(list)
+    for level in range(1, 19):
+        for fold in range(N_FOLD):
+            model = XGBClassifier()
+            model.load_model(
+                input_dir / f"model_xgb_fold_{fold}_level_{level}.json"
+            )
+            xgb_models[level].append(model)
+
+            model = lightgbm.Booster(
+                model_file=str(
+                    input_dir / f"model_lgbm_fold_{fold}_level_{level}.txt"
+                )
+            )
+            lgbm_models[level].append(model)
+
+    return xgb_models, lgbm_models
 
 
 def main() -> None:
     input_dir = pathlib.Path("./data/upload")
 
     threshold = float(load_txt(input_dir / "threshold_overall_stacking.txt"))
+    xgb_models, lgbm_models = load_model(input_dir)
     clfs = load_pickle(str(input_dir / "stacking_ridge.pkl"))
     level_groups = ["0-4", "5-12", "13-22"]
 
-    levelGroup_features: Dict[str, List[Any]] = {
-        lg: defaultdict(list) for lg in level_groups
-    }
     cols_to_drop = {}
     for level_group in level_groups:
         cols_to_drop[level_group] = load_pickle(
             input_dir / f"cols_to_drop_{level_group}.pkl"
         ) + ["session_id"]
+
+    levelGroup_features = defaultdict(list)
 
     env = jo_wilder.make_env()
     iter_test = env.iter_test()
@@ -88,33 +89,15 @@ def main() -> None:
             .to_numpy()
             .astype("float32")
         )
-        if level_group == "0-4":
-            levelGroup_features[level_group][session_id] = X[0].tolist()
-        elif level_group == "5-12":
-            levelGroup_features[level_group][session_id] = sum(
-                (
-                    levelGroup_features["0-4"][session_id],
-                    X[0].tolist(),
-                ),
-                [],
-            )
-        elif level_group == "13-22":
-            levelGroup_features[level_group][session_id] = sum(
-                (
-                    levelGroup_features["5-12"][session_id],
-                    X[0].tolist(),
-                ),
-                [],
-            )
+
+        levelGroup_features[session_id].extend(X[0].tolist())
+        X_feat = levelGroup_features[session_id]
 
         for level in sample_submission["level"].unique():
-            X_feat = levelGroup_features[level_group][session_id]
-            pred_xgb = predict_xgb([X_feat], input_dir, level)
-            pred_lgbm = predict_lgbm([X_feat], input_dir, level)
-            X_pred = np.concatenate(
-                (pred_xgb.reshape(-1, 1), pred_lgbm.reshape(-1, 1)), axis=1
-            )
+            pred_xgb = predict_xgb([X_feat], xgb_models[level])[0]
+            pred_lgbm = predict_lgbm([X_feat], lgbm_models[level])[0]
 
+            X_pred = np.expand_dims(np.array([pred_xgb, pred_lgbm]), axis=0)
             pred = np.mean(
                 [clf.predict(X_pred) for clf in clfs[level]], axis=0
             )
