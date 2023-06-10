@@ -54,7 +54,6 @@ class PSPLightningModule(ptl.LightningModule):
         cat_embedding: torch.nn.Module,
         transformer_nhead: int = 4,
         transformer_num_encoder_layers: int = 2,
-        transformer_num_decoder_layers: int = 2,
         transformer_dim_feedforward: int = 256,
         transformer_dropout: float = 0.1,
         output_dim: int = 1,
@@ -64,14 +63,16 @@ class PSPLightningModule(ptl.LightningModule):
         self.learning_rate = learning_rate
 
         self.cat_embedding = cat_embedding
-        self.d_model = self.cat_embedding.embedding_dim + continuous_dim
-        self.transformer = torch.nn.Transformer(
-            d_model=self.d_model,
+        self.d_model = int(self.cat_embedding.embedding_dim + continuous_dim)
+
+        self.encoder_layer = torch.nn.TransformerEncoderLayer(
             nhead=transformer_nhead,
-            num_encoder_layers=transformer_num_encoder_layers,
-            num_decoder_layers=transformer_num_decoder_layers,
+            d_model=self.d_model,
             dim_feedforward=transformer_dim_feedforward,
             dropout=transformer_dropout,
+        )
+        self.transformer = torch.nn.TransformerEncoder(
+            self.encoder_layer, num_layers=transformer_num_encoder_layers
         )
         self.fc = torch.nn.Sequential(
             torch.nn.LayerNorm(self.d_model),
@@ -87,12 +88,7 @@ class PSPLightningModule(ptl.LightningModule):
         )  # (bs, max_seq_len, 1)
         x = torch.cat([x_cat, x_continuous], dim=2)
         x = x.permute(1, 0, 2)  # (max_seq_len, bs, embedding_dim)
-        mask = torch.nn.Transformer.generate_square_subsequent_mask(
-            x.size(0), device=self.device
-        )
-        x = self.transformer(
-            x, x, mask, mask, mask
-        )  # (max_seq_len, bs, embedding_dim)
+        x = self.transformer(x, mask=None)  # (max_seq_len, bs, embedding_dim)
         x = x.permute(1, 0, 2)  # (bs, max_seq_len, embedding_dim)
         x = x[:, -1, :]
         x = self.fc(x)  # (bs, max_seq_len, output_dim)
