@@ -28,6 +28,8 @@ def fit_cat(
 ) -> CatBoostClassifier:
     if is_balanced:
         weight_train = compute_sample_weight("balanced", y_train)
+    else:
+        weight_train = None
 
     model = CatBoostClassifier(**params)
     model.set_params(random_state=seed)
@@ -54,6 +56,8 @@ def fit_lgbm(
 ) -> LGBMClassifier:
     if is_balanced:
         weight_train = compute_sample_weight("balanced", y_train)
+    else:
+        weight_train = None
 
     model = LGBMClassifier(**params)
     model.set_params(random_state=seed)
@@ -83,6 +87,8 @@ def fit_xgb(
 ) -> XGBClassifier:
     if is_balanced:
         weight_train = compute_sample_weight("balanced", y_train)
+    else:
+        weight_train = None
 
     model = XGBClassifier(**params)
     model.set_params(random_state=seed)
