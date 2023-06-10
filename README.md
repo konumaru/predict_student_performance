@@ -8,5 +8,20 @@
 ## Solution
 
 - Create features for each level_group.
-- Train model for each level not each level_group.
-- Calculate best threshold of f1-score for each level (model).
+  - In addition, using the previous level_group features.
+- LGBM and XGB model for each level.
+- Optimize hyperparameters for each level. (Only XGB)
+- I think the amount of features is almost the same as what is in the public.
+
+### Not work for me
+
+- Catboost model
+- level_group probability as feature fo stacking model.
+- sample weight for each level.
+- optimize threshold of f1-score for each level.
+- As a feature of gbdt, using event seqence vectorize with w2v.
+
+### Not try yet
+
+- Ensenble knoledge tracing model with transformer or 1dcnn
+- Optimize hyperparameters of LGBM for each level.
