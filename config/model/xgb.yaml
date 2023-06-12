@@ -7,7 +7,7 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
+    eval_metric: logloss
     learning_rate: 0.02
     n_estimators: 1000
     max_depth: 4
@@ -24,7 +24,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 0.8085802707053835
     colsample_bytree: 0.225115043966883
     lambda: 3.25995317579048
@@ -38,7 +37,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 0.11128705390120218
     colsample_bytree: 0.20826892471104372
     lambda: 10.050960093908277
@@ -52,7 +50,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 1.9101478516044135
     colsample_bytree: 0.36299583718678996
     lambda: 0.4248750887289173
@@ -66,7 +63,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 0.021644857152708835
     colsample_bytree: 0.2762452243023692
     lambda: 16.79034359673598
@@ -80,7 +76,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 1.2997549402370168
     colsample_bytree: 0.4235204693804397
     lambda: 12.021903294704535
@@ -94,7 +89,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 10.873762059570014
     colsample_bytree: 0.36373360355456036
     lambda: 0.03236206529137213
@@ -108,7 +102,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 9.518166227308956
     colsample_bytree: 0.5434343783234983
     lambda: 15.905364490654408
@@ -122,7 +115,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 0.9243472200341611
     colsample_bytree: 0.38729712632333085
     lambda: 16.210387186120744
@@ -136,7 +128,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 0.013693809765674275
     colsample_bytree: 0.2182919961846147
     lambda: 14.5441884167113
@@ -150,7 +141,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 1.4874940286977507
     colsample_bytree: 0.32374026391359667
     lambda: 1.3206527558031387
@@ -164,7 +154,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 0.12156864327549857
     colsample_bytree: 0.23477804438110222
     lambda: 13.722313355100145
@@ -178,7 +167,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 19.800442959271766
     colsample_bytree: 0.35975975812600114
     lambda: 0.047430129001458814
@@ -192,7 +180,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 5.993489130623113
     colsample_bytree: 0.38292994267077834
     lambda: 0.3825777733432281
@@ -206,7 +193,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 0.6286379615088504
     colsample_bytree: 0.437819752805538
     lambda: 4.294376066820166
@@ -220,7 +206,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 0.19693551350830554
     colsample_bytree: 0.3457212595947772
     lambda: 11.751441048625129
@@ -234,7 +219,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 0.42003650805386916
     colsample_bytree: 0.5070154806527786
     lambda: 0.9205693178258856
@@ -248,7 +232,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 1.0950709494017332
     colsample_bytree: 0.42569748210874714
     lambda: 0.21783325922928767
@@ -262,7 +245,6 @@ params:
     gpu_id: 0
     tree_method: gpu_hist
     objective: binary:logistic
-    eval_metric: auc
     alpha: 11.87688270298109
     colsample_bytree: 0.26293590971016473
     lambda: 5.008358458596116

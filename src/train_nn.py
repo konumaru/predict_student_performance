@@ -97,7 +97,7 @@ def train(
                 fqid_embedding_dim=cfg.model.fqid_embedding_dim,
                 room_fqid_nunique=len(_uniques_map["room_fqid"]),
                 room_fqid_embedding_dim=cfg.model.room_fqid_embedding_dim,
-            )
+            ).to("cuda")
             model = PSPLightningModule(
                 continuous_dim=1,
                 cat_embedding=embedding,

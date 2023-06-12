@@ -66,7 +66,7 @@ def fit_lgbm(
         y_train,
         sample_weight=weight_train,
         eval_set=[(X_train, y_train), (X_valid, y_valid)],
-        eval_metric="auc",
+        eval_metric="logloss",
         callbacks=[lightgbm.log_evaluation(50), lightgbm.early_stopping(50)],
     )
     model.booster_.save_model(
