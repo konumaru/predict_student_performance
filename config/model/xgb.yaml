@@ -1,5 +1,6 @@
 name: xgb
 is_balanced: False
+is_only_top_features: False
 
 params:
   default:

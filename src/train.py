@@ -1,5 +1,6 @@
 import os
 import pathlib
+from typing import List
 
 import hydra
 import lightgbm
@@ -115,11 +116,11 @@ def train(
             feature_dir / f"y_valid_fold_{fold}.parquet"
         ).reset_index(drop=True)
 
-        if cfg.model.name == "xgb":
+        if "xgb" in cfg.model.name:
             fit_model = fit_xgb
-        elif cfg.model.name == "lgbm":
+        elif "lgbm" in cfg.model.name:
             fit_model = fit_lgbm
-        elif cfg.model.name == "cat":
+        elif "cat" in cfg.model.name:
             fit_model = fit_cat
         else:
             fit_model = fit_xgb
@@ -141,6 +142,13 @@ def train(
 
                 X_train = X.loc[_y_train["session"]]
                 X_valid = X.loc[_y_valid["session"]]
+
+                if cfg.model.is_only_top_features:
+                    cols_top_hal_fi: List[int] = load_pickle(
+                        feature_dir / "cols_top_hal_fi.pkl"
+                    )[level]
+                    X_train.drop(cols_top_hal_fi, axis=1, inplace=True)
+                    X_valid.drop(cols_top_hal_fi, axis=1, inplace=True)
 
                 model = fit_model(
                     params,

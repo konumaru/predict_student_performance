@@ -18,15 +18,16 @@ def load_folds_data(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     input_dir = pathlib.Path("./data/train/")
     feature_dir = pathlib.Path("./data/feature/")
-    oofs_xgb = []
-    oofs_lgbm = []
+
+    model_names = ["xgb", "lgbm", "xgb_v2", "lgbm_v2"]
+    oofs = {model_name: [] for model_name in model_names}
     labels = []
     levels = []
     for fold in folds:
-        oofs_xgb.append(load_pickle(input_dir / f"y_pred_xgb_fold_{fold}.pkl"))
-        oofs_lgbm.append(
-            load_pickle(input_dir / f"y_pred_lgbm_fold_{fold}.pkl")
-        )
+        for model_name in model_names:
+            oofs[model_name].append(
+                load_pickle(input_dir / f"y_pred_{model_name}_fold_{fold}.pkl")
+            )
 
         y_valid = pd.read_parquet(feature_dir / f"y_valid_fold_{fold}.parquet")
         labels.append(y_valid["correct"].to_numpy())
@@ -34,8 +35,8 @@ def load_folds_data(
 
     oof = np.concatenate(
         [
-            np.concatenate(oofs_xgb).reshape(-1, 1),
-            np.concatenate(oofs_lgbm).reshape(-1, 1),
+            np.concatenate(oofs[model_name]).reshape(-1, 1)
+            for model_name in model_names
         ],
         axis=1,
     )
